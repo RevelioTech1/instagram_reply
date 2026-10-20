@@ -121,8 +121,7 @@ export function Inbox() {
           />
         ) : (
           <div className="rounded-3xl border border-dashed border-[#e4d8c4] bg-[#fffdf8] p-8 text-sm text-muted-foreground">
-            Выберите комментарий слева. Учебные примеры уже лежат во входящих: так мастерская видит тон ответа до
-            подключения Instagram.
+            Выберите комментарий слева.
           </div>
         )}
       </section>

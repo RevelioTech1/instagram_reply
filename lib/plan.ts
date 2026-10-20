@@ -1,5 +1,5 @@
 import type { CatalogIndex } from "./catalog.ts";
-import { classifyIntent, isCommercial } from "./intent.ts";
+import { classifyIntent, isCommercial, isPresenceReaction, pickPraiseReply } from "./intent.ts";
 import { matchComment } from "./match.ts";
 import { buildReplies } from "./reply.ts";
 import type { IntentFlags, Policy, PreparedProduct, PrimaryIntent } from "./types.ts";
@@ -24,6 +24,26 @@ export function planComment(options: {
   policy: Policy;
 }): Plan {
   const { flags, primary } = classifyIntent(options.comment, options.policy.priceSymbols);
+  if (
+    primary === "none" &&
+    options.policy.reactToPraise &&
+    isPresenceReaction(options.comment, options.policy.priceSymbols)
+  ) {
+    const replyPublic = pickPraiseReply(options.comment, options.policy.praiseReplies);
+    if (replyPublic) {
+      return {
+        flags,
+        primary,
+        status: options.policy.autoReply ? "send" : "draft",
+        confidence: 1,
+        reason: "Реакция без вопроса. Короткий ответ, без карточки и цены.",
+        products: [],
+        context: null,
+        replyPublic,
+        replyPrivate: "",
+      };
+    }
+  }
   if (primary === "none") {
     return {
       flags,

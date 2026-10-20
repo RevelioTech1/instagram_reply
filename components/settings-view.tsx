@@ -27,6 +27,7 @@ export function SettingsView() {
   const [sync, setSync] = useState<SyncState | null>(null);
   const [busy, setBusy] = useState("");
   const [symbolDraft, setSymbolDraft] = useState<string | null>(null);
+  const [praiseDraft, setPraiseDraft] = useState<string | null>(null);
 
   function apply(next: SettingsDTO) {
     setSettings(next);
@@ -67,6 +68,11 @@ export function SettingsView() {
       minConfidence: settings.minConfidence,
       phone: settings.phone,
       priceSymbols: parsePriceSymbols(symbolDraft ?? (settings.priceSymbols ?? []).join("\n")),
+      reactToPraise: settings.reactToPraise,
+      praiseReplies: (praiseDraft ?? (settings.praiseReplies ?? []).join("\n"))
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean),
       igUserId: settings.igUserId,
       igUsername: settings.igUsername,
       graphVersion: settings.graphVersion,
@@ -135,6 +141,7 @@ export function SettingsView() {
     await postSettings();
     setBusy("");
     setSymbolDraft(null);
+    setPraiseDraft(null);
     setNotice("Правила сохранены.");
   }
 
@@ -235,6 +242,23 @@ export function SettingsView() {
               onChange={(event) => setSettings({ ...settings, minConfidence: Number(event.target.value) })}
               className="mt-2 w-full"
             />
+          </label>
+          <Toggle
+            label="Отвечать на реакции"
+            hint="На «какая красота» и похожие слова готовится короткая благодарность, без цены и ссылки на карточку."
+            checked={settings.reactToPraise}
+            onChange={(reactToPraise) => setSettings({ ...settings, reactToPraise })}
+          />
+          <label className="block text-sm">
+            Шаблоны на реакции
+            <Textarea
+              className="mt-1 min-h-28 bg-white"
+              value={praiseDraft ?? (settings.praiseReplies ?? []).join("\n")}
+              onChange={(event) => setPraiseDraft(event.target.value)}
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Одна фраза на строку, три или четыре. На каждый комментарий выбирается одна и та же, без карточки товара.
+            </span>
           </label>
           <label className="block text-sm">
             Знаки запроса цены

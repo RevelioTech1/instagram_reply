@@ -354,6 +354,11 @@ export function savePolicy(patch: Partial<Policy>): Policy {
   next.priceSymbols = parsePriceSymbols(
     Array.isArray(next.priceSymbols) ? next.priceSymbols.join("\n") : DEFAULT_POLICY.priceSymbols.join("\n"),
   );
+  next.reactToPraise = Boolean(next.reactToPraise);
+  next.praiseReplies = (Array.isArray(next.praiseReplies) ? next.praiseReplies : DEFAULT_POLICY.praiseReplies)
+    .map((item) => String(item).trim())
+    .filter(Boolean)
+    .slice(0, 8);
   putSetting(db(), "policy", JSON.stringify(next));
   return next;
 }

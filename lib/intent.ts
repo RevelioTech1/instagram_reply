@@ -114,6 +114,40 @@ function isSymbolRun(token: string, symbols: string[]): boolean {
   return true;
 }
 
+export function isPresenceReaction(text: string, priceSymbols: string[] = DEFAULT_POLICY.priceSymbols): boolean {
+  if (classifyIntent(text, priceSymbols).primary !== "none") return false;
+  const words = wordsOf(text);
+  if (words.length === 0 || words.length > 8) return false;
+  return words.every((word) => FILLER.has(word) || isPraiseWord(word)) && words.some((word) => isPraiseWord(word));
+}
+
+export function pickPraiseReply(text: string, replies: string[]): string {
+  const list = replies.map((item) => item.trim()).filter(Boolean).slice(0, 8);
+  if (list.length === 0) return "";
+  let hash = 0;
+  const key = text.trim().toLowerCase().replace(/ё/g, "е");
+  for (let index = 0; index < key.length; index += 1) hash = (hash * 33 + key.charCodeAt(index)) >>> 0;
+  return list[hash % list.length] ?? "";
+}
+
+function wordsOf(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[^a-zа-я0-9\s]+/gi, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function isPraiseWord(word: string): boolean {
+  return (
+    REACTION.has(word) ||
+    /^(красив|красот|краш|украш|супер|шикар|любл|нрав|обожа|восторг|прелест|аминь|спасиб|благодар|огон|вау|топ|класс|крут|отлич|браво|мил|чудо|бомб)/.test(
+      word,
+    )
+  );
+}
+
 function isReactionOnly(source: string): boolean {
   const words = source
     .replace(/[^a-zа-я0-9?\s]+/gi, " ")
@@ -122,6 +156,43 @@ function isReactionOnly(source: string): boolean {
   if (words.length === 0) return true;
   return words.every((word) => REACTION.has(word));
 }
+
+const FILLER = new Set([
+  "какая",
+  "какой",
+  "какие",
+  "какое",
+  "это",
+  "вот",
+  "просто",
+  "очень",
+  "так",
+  "такая",
+  "такой",
+  "такие",
+  "вы",
+  "вам",
+  "мне",
+  "нам",
+  "ну",
+  "прям",
+  "вообще",
+  "наша",
+  "наши",
+  "ваш",
+  "ваша",
+  "ваше",
+  "ваши",
+  "наш",
+  "и",
+  "а",
+  "да",
+  "же",
+  "как",
+  "то",
+  "что",
+  "за",
+]);
 
 const REACTION = new Set([
   "красота",

@@ -175,8 +175,27 @@ test("a symbol counts only when it is in the price-sign list", () => {
   assert.equal(plan("§", "Б-КО-338", policy).primary, "price");
 });
 
-test("a compliment is not answered", () => {
+test("a compliment gets one short reply and no product card", () => {
   const result = plan("Какая красота!", "Кольцо Б-КО-338 Спаси и Сохрани");
+  assert.equal(result.status, "draft");
+  assert.equal(result.products.length, 0);
+  assert.equal(result.replyPrivate, "");
+  assert.ok(DEFAULT_POLICY.praiseReplies.includes(result.replyPublic));
+  assert.doesNotMatch(result.replyPublic, /₽|iordani\.com|http/);
+  assert.equal(plan("Какая красота!", "другая подпись").replyPublic, result.replyPublic);
+});
+
+test("praise about the jewelry is answered without a catalog card", () => {
+  for (const text of ["Супер украшения", "Супер крашения"]) {
+    const result = plan(text, "Кольцо Б-КО-338");
+    assert.equal(result.primary, "none");
+    assert.equal(result.products.length, 0);
+    assert.match(result.replyPublic, /Здравствуйте/);
+  }
+});
+
+test("praise replies can be turned off", () => {
+  const result = plan("Какая красота!", "Б-КО-338", { ...DEFAULT_POLICY, reactToPraise: false });
   assert.equal(result.status, "skipped");
   assert.equal(result.replyPublic, "");
 });

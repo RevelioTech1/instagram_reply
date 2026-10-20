@@ -70,6 +70,8 @@ export type Policy = {
   includePrice: boolean;
   phone: string;
   priceSymbols: string[];
+  reactToPraise: boolean;
+  praiseReplies: string[];
 };
 
 export type AuthMode = "" | "instagram" | "facebook";
@@ -98,6 +100,13 @@ export const DEFAULT_POLICY: Policy = {
   includePrice: true,
   phone: "8 800 222-32-13",
   priceSymbols: ["+", "➕", "＋"],
+  reactToPraise: true,
+  praiseReplies: [
+    "Здравствуйте! Спасибо, очень приятно.",
+    "Здравствуйте! Рады, что украшение откликнулось.",
+    "Здравствуйте! Спасибо за тёплые слова.",
+    "Здравствуйте! Нам очень приятно это слышать.",
+  ],
 };
 
 export const DEFAULT_SECRETS: Secrets = {

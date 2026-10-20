@@ -59,6 +59,8 @@ export type SettingsDTO = {
   includePrice: boolean;
   phone: string;
   priceSymbols: string[];
+  reactToPraise: boolean;
+  praiseReplies: string[];
   hasAccessToken: boolean;
   accessTokenHint: string;
   hasAppSecret: boolean;

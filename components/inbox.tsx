@@ -199,7 +199,9 @@ function CommentDetail({
       <div className="grid gap-3 md:grid-cols-2">
         {comment.products.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-[#e4d8c4] bg-white/60 p-4 text-sm text-muted-foreground md:col-span-2">
-            Карточка не выбрана: бот не называет цену наугад и просит артикул.
+            {comment.primaryIntent === "none"
+              ? "Без карточки: это реакция. В ответ только короткая благодарность, без цены и ссылки."
+              : "Карточка не выбрана: бот не называет цену наугад и просит артикул."}
           </div>
         ) : (
           comment.products.map((product) => <ProductCard key={product.url} product={product} />)
@@ -210,11 +212,15 @@ function CommentDetail({
         <div className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
           <p className="text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Как это выглядит в комментарии</p>
           <Textarea className="mt-3 min-h-32 bg-white" value={replyPublic} onChange={(event) => setReplyPublic(event.target.value)} />
-          <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Личное сообщение со ссылкой</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            В комментарии ссылка часто не нажимается. В директ она приходит рабочей, одно сообщение на комментарий.
-          </p>
-          <Textarea className="mt-2 min-h-32 bg-white" value={replyPrivate} onChange={(event) => setReplyPrivate(event.target.value)} />
+          {comment.primaryIntent === "none" ? null : (
+            <>
+              <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Личное сообщение со ссылкой</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                В комментарии ссылка часто не нажимается. В директ она приходит рабочей, одно сообщение на комментарий.
+              </p>
+              <Textarea className="mt-2 min-h-32 bg-white" value={replyPrivate} onChange={(event) => setReplyPrivate(event.target.value)} />
+            </>
+          )}
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <Button className="h-9" disabled={!canSend || busy !== ""} onClick={() => void send()}>
               {comment.source === "demo" || comment.source === "simulator" ? "Сохранить как ответ" : "Отправить в Instagram"}

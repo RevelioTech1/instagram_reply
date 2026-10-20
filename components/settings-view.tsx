@@ -265,7 +265,9 @@ export function SettingsView() {
             <li>
               Уже внутри приложения откройте Instagram → «API setup with Instagram business login». Скопируйте оттуда Instagram App ID и Instagram App Secret. Это не номер из «Настройки → Основные».
             </li>
-            <li>В блоке Business login settings вставьте адрес возврата ниже и сохраните.</li>
+            <li>
+              Адрес возврата — не поле «URL обратного вызова» в шаге 3 про Webhooks. Прокрутите до шага «4. Настройте вход в Instagram от имени компании», разверните его и откройте настройки входа. Туда вставьте адрес возврата ниже и сохраните.
+            </li>
             <li>Пока приложение в режиме разработки, добавьте @iordani925 как Instagram Tester и примите приглашение в Instagram.</li>
             <li>Вернитесь сюда и нажмите «Войти через Instagram».</li>
           </ol>

@@ -7,7 +7,7 @@
     "build": "NODE_OPTIONS='--experimental-sqlite --disable-warning=ExperimentalWarning' next build",
     "start": "NODE_OPTIONS='--experimental-sqlite --disable-warning=ExperimentalWarning' next start -H 0.0.0.0 -p 4317",
     "lint": "eslint",
-    "test": "node --experimental-strip-types --test lib/engine.test.ts"
+    "test": "node --experimental-strip-types --test lib/engine.test.ts lib/ig-login.test.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

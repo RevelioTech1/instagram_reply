@@ -65,6 +65,10 @@ export type SettingsDTO = {
   igUserId: string;
   igUsername: string;
   graphVersion: string;
+  authMode: "" | "instagram" | "facebook";
+  igAppId: string;
+  hasIgAppSecret: boolean;
+  tokenExpiresAt: string;
 };
 
 export type StatsDTO = {

@@ -1,4 +1,5 @@
-import { clearSecret, getSettingsDTO, savePolicy, saveSecrets } from "@/lib/db";
+import { clearSecret, disconnectInstagram, getSettingsDTO, savePolicy, saveSecrets } from "@/lib/db";
+import { revokeInstagramAccess } from "@/lib/instagram";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,8 +21,12 @@ export async function POST(request: Request) {
     igUserId?: string;
     igUsername?: string;
     graphVersion?: string;
+    igAppId?: string;
+    igAppSecret?: string;
+    authMode?: "" | "instagram" | "facebook";
     clearAccessToken?: boolean;
     clearAppSecret?: boolean;
+    disconnect?: boolean;
   };
   savePolicy({
     ...(body.autoReply !== undefined ? { autoReply: body.autoReply } : {}),
@@ -31,6 +36,11 @@ export async function POST(request: Request) {
     ...(body.includePrice !== undefined ? { includePrice: body.includePrice } : {}),
     ...(body.phone !== undefined ? { phone: body.phone } : {}),
   });
+  if (body.disconnect) {
+    await revokeInstagramAccess();
+    disconnectInstagram();
+    return Response.json(getSettingsDTO());
+  }
   if (body.clearAccessToken) clearSecret("accessToken");
   if (body.clearAppSecret) clearSecret("appSecret");
   saveSecrets({
@@ -39,6 +49,9 @@ export async function POST(request: Request) {
     igUserId: body.igUserId,
     igUsername: body.igUsername,
     graphVersion: body.graphVersion,
+    igAppId: body.igAppId,
+    igAppSecret: body.igAppSecret,
+    authMode: body.authMode,
   });
   return Response.json(getSettingsDTO());
 }

@@ -19,6 +19,7 @@ export function SettingsView() {
   const [settings, setSettings] = useState<SettingsDTO | null>(null);
   const [token, setToken] = useState("");
   const [secret, setSecret] = useState("");
+  const [igSecret, setIgSecret] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [sync, setSync] = useState<SyncState | null>(null);
@@ -29,6 +30,13 @@ export function SettingsView() {
   }
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const problem = params.get("error");
+    const user = params.get("user");
+    if (connected) setNotice(user ? `Вошли в Instagram как @${user}.` : "Вошли в Instagram.");
+    if (problem) setError(problem);
+    if (connected || problem) window.history.replaceState(null, "", window.location.pathname);
     fetch("/api/settings")
       .then((response) => response.json())
       .then((data: SettingsDTO) => apply(data))
@@ -46,40 +54,95 @@ export function SettingsView() {
     return () => window.clearInterval(timer);
   }, [sync?.running]);
 
-  async function save() {
-    if (!settings) return;
-    setBusy("save");
+  function payload(extra: Record<string, unknown> = {}) {
+    if (!settings) return null;
+    return {
+      autoReply: settings.autoReply,
+      publicReply: settings.publicReply,
+      privateReply: settings.privateReply,
+      includePrice: settings.includePrice,
+      minConfidence: settings.minConfidence,
+      phone: settings.phone,
+      igUserId: settings.igUserId,
+      igUsername: settings.igUsername,
+      graphVersion: settings.graphVersion,
+      igAppId: settings.igAppId,
+      ...extra,
+    };
+  }
+
+  async function postSettings(extra: Record<string, unknown> = {}) {
+    const body = payload(extra);
+    if (!body) return null;
     const response = await fetch("/api/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        autoReply: settings.autoReply,
-        publicReply: settings.publicReply,
-        privateReply: settings.privateReply,
-        includePrice: settings.includePrice,
-        minConfidence: settings.minConfidence,
-        phone: settings.phone,
-        igUserId: settings.igUserId,
-        igUsername: settings.igUsername,
-        graphVersion: settings.graphVersion,
-        accessToken: token,
-        appSecret: secret,
-      }),
+      body: JSON.stringify(body),
     });
     const data = (await response.json()) as SettingsDTO;
     apply(data);
+    return data;
+  }
+
+  async function save() {
+    if (!settings) return;
+    setBusy("save");
+    await postSettings({
+      accessToken: token,
+      appSecret: secret,
+      igAppSecret: igSecret,
+      ...(token ? { authMode: "facebook" } : {}),
+    });
     setToken("");
     setSecret("");
+    setIgSecret("");
     setBusy("");
     setNotice("Сохранили.");
     setError("");
+  }
+
+  async function connectInstagram() {
+    if (!settings) return;
+    setNotice("");
+    setError("");
+    if (!settings.igAppId.trim() || (!igSecret.trim() && !settings.hasIgAppSecret)) {
+      setError("Вставьте Instagram App ID и секрет приложения. Их видно в кабинете Meta, в продукте Instagram.");
+      return;
+    }
+    setBusy("login");
+    await postSettings({ igAppSecret: igSecret });
+    window.location.assign("/api/instagram/login");
+  }
+
+  async function disconnect() {
+    setBusy("logout");
+    setNotice("");
+    setError("");
+    await postSettings({ disconnect: true });
+    setBusy("");
+    setNotice("Вышли из Instagram. Панель больше не отвечает от имени аккаунта.");
+  }
+
+  async function saveRules() {
+    setBusy("rules");
+    setNotice("");
+    setError("");
+    await postSettings();
+    setBusy("");
+    setNotice("Правила сохранены.");
   }
 
   async function test() {
     setBusy("test");
     setNotice("");
     setError("");
-    if (token || settings) await save();
+    const typed = token;
+    await postSettings({
+      igAppSecret: igSecret,
+      appSecret: secret,
+      accessToken: typed,
+      ...(typed ? { authMode: "facebook" as const } : {}),
+    });
     const response = await fetch("/api/instagram/test", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -170,38 +233,73 @@ export function SettingsView() {
             Телефон в ответах про доставку
             <Input className="mt-1 h-9 bg-white" value={settings.phone} onChange={(event) => setSettings({ ...settings, phone: event.target.value })} />
           </label>
+          <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void saveRules()}>
+            Сохранить правила
+          </Button>
         </section>
-        <section className="space-y-3 rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
-          <h2 className="font-display text-3xl">Токен</h2>
+        <section className="space-y-4 rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
+          <h2 className="font-display text-3xl">Вход через Instagram</h2>
           <p className="text-sm text-[#5c5348]">
-            Нужен токен Страницы Facebook, к которой привязан профессиональный аккаунт @iordani925. Права:
-            instagram_manage_comments, instagram_manage_messages, instagram_basic, pages_read_engagement.
+            Сервисы для постов подключаются так же: вы входите в сам @iordani925, и панель получает право читать
+            комментарии и отвечать. Публичная страница Facebook для этого не нужна.
           </p>
+          {settings.authMode === "instagram" && settings.hasAccessToken ? (
+            <div className="rounded-2xl bg-[#e7f0e4] px-4 py-3 text-sm text-[#1c3b2c]">
+              Вход выполнен: @{settings.igUsername || "iordani925"}
+              {settings.tokenExpiresAt ? `. Сессия действует до ${formatExpiry(settings.tokenExpiresAt)}` : ""}.
+              Перед истечением панель продлевает её сама.
+            </div>
+          ) : null}
+          <ol className="list-decimal space-y-2 pl-5 text-sm text-[#5c5348]">
+            <li>Откройте developers.facebook.com и создайте приложение типа Business. Войти можно личным аккаунтом Meta — это кабинет разработчика, не страница бренда.</li>
+            <li>Добавьте продукт Instagram и откройте «API setup with Instagram login».</li>
+            <li>Скопируйте сюда Instagram App ID и Instagram App Secret.</li>
+            <li>В том же окне вставьте адрес возврата ниже, символ в символ.</li>
+            <li>Пока приложение в режиме разработки, добавьте @iordani925 в роли Instagram Tester и примите приглашение в Instagram.</li>
+            <li>Нажмите «Войти через Instagram» и войдите в профессиональный аккаунт @iordani925.</li>
+          </ol>
           <label className="block text-sm">
-            Токен {settings.hasAccessToken ? `(сохранён ${settings.accessTokenHint})` : ""}
-            <Input className="mt-1 h-9 bg-white" type="password" value={token} placeholder="Вставьте новый токен" onChange={(event) => setToken(event.target.value)} />
+            Instagram App ID
+            <Input
+              className="mt-1 h-9 bg-white"
+              value={settings.igAppId}
+              autoComplete="off"
+              onChange={(event) => setSettings({ ...settings, igAppId: event.target.value.trim() })}
+            />
           </label>
           <label className="block text-sm">
-            Секрет приложения, для подписи вебхука
-            <Input className="mt-1 h-9 bg-white" type="password" value={secret} placeholder={settings.hasAppSecret ? "Секрет уже сохранён" : "Необязательно до публикации"} onChange={(event) => setSecret(event.target.value)} />
+            Instagram App Secret
+            <Input
+              className="mt-1 h-9 bg-white"
+              type="password"
+              value={igSecret}
+              placeholder={settings.hasIgAppSecret ? "Секрет уже сохранён" : "Из продукта Instagram"}
+              autoComplete="off"
+              onChange={(event) => setIgSecret(event.target.value)}
+            />
           </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="block text-sm">
-              Имя аккаунта
-              <Input className="mt-1 h-9 bg-white" value={settings.igUsername} onChange={(event) => setSettings({ ...settings, igUsername: event.target.value })} />
-            </label>
-            <label className="block text-sm">
-              Id Instagram
-              <Input className="mt-1 h-9 bg-white" value={settings.igUserId} onChange={(event) => setSettings({ ...settings, igUserId: event.target.value })} />
-            </label>
+          <div className="rounded-2xl bg-[#f6f1e7] px-4 py-3">
+            <p className="text-xs tracking-[0.14em] text-[#8a6a32] uppercase">Адрес возврата</p>
+            <p className="mt-2 text-sm break-all">{origin}/api/instagram/callback</p>
+            <Button
+              variant="outline"
+              className="mt-3 h-8 bg-white"
+              type="button"
+              onClick={() => void navigator.clipboard.writeText(`${origin}/api/instagram/callback`).then(() => setNotice("Адрес возврата скопирован."))}
+            >
+              Скопировать адрес
+            </Button>
+            {origin.startsWith("http://127.0.0.1") ? (
+              <p className="mt-2 text-xs text-[#8a6a32]">
+                Для локального входа откройте панель как http://localhost:4317. Meta сверяет адрес символ в символ.
+              </p>
+            ) : (
+              <p className="mt-2 text-xs text-[#8a6a32]">Вставьте этот адрес в приложение Meta без изменений.</p>
+            )}
           </div>
-          <label className="block text-sm">
-            Версия Graph API
-            <Input className="mt-1 h-9 bg-white" value={settings.graphVersion} onChange={(event) => setSettings({ ...settings, graphVersion: event.target.value })} />
-          </label>
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Button className="h-9" disabled={busy !== ""} onClick={() => void save()}>
-              Сохранить
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button className="h-9" disabled={busy !== ""} onClick={() => void connectInstagram()}>
+              {busy === "login" ? "Переходим в Instagram…" : "Войти через Instagram"}
             </Button>
             <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void test()}>
               Проверить подключение
@@ -209,9 +307,48 @@ export function SettingsView() {
             <Button variant="secondary" className="h-9" disabled={busy !== ""} onClick={() => void poll()}>
               Забрать последние комментарии
             </Button>
+            {settings.hasAccessToken ? (
+              <Button variant="ghost" className="h-9" disabled={busy !== ""} onClick={() => void disconnect()}>
+                Выйти
+              </Button>
+            ) : null}
           </div>
           {notice ? <p className="text-sm text-[#1c3b2c]">{notice}</p> : null}
-          {error ? <p className="text-sm text-[#9b2c2c]">{error}</p> : null}
+          {error ? <p className="text-sm break-words text-[#9b2c2c]">{error}</p> : null}
+          <details className="rounded-2xl border border-[#e4d8c4] px-4 py-3">
+            <summary className="cursor-pointer text-sm font-medium">Токен вручную</summary>
+            <div className="mt-3 space-y-3">
+              <p className="text-sm text-[#5c5348]">
+                Если токен Страницы уже есть, вставьте его сюда. Кнопка «Войти через Instagram» выше этот шаг пропускает.
+                Для подписи вебхука нужен секрет приложения Meta.
+              </p>
+              <label className="block text-sm">
+                Токен {settings.hasAccessToken ? `(сохранён ${settings.accessTokenHint})` : ""}
+                <Input className="mt-1 h-9 bg-white" type="password" value={token} placeholder="Вставьте токен" autoComplete="off" onChange={(event) => setToken(event.target.value)} />
+              </label>
+              <label className="block text-sm">
+                Секрет приложения, для подписи вебхука
+                <Input className="mt-1 h-9 bg-white" type="password" value={secret} placeholder={settings.hasAppSecret ? "Секрет уже сохранён" : "Необязательно, пока вебхук локальный"} autoComplete="off" onChange={(event) => setSecret(event.target.value)} />
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm">
+                  Имя аккаунта
+                  <Input className="mt-1 h-9 bg-white" value={settings.igUsername} onChange={(event) => setSettings({ ...settings, igUsername: event.target.value })} />
+                </label>
+                <label className="block text-sm">
+                  Id Instagram
+                  <Input className="mt-1 h-9 bg-white" value={settings.igUserId} onChange={(event) => setSettings({ ...settings, igUserId: event.target.value })} />
+                </label>
+              </div>
+              <label className="block text-sm">
+                Версия Graph API
+                <Input className="mt-1 h-9 bg-white" value={settings.graphVersion} onChange={(event) => setSettings({ ...settings, graphVersion: event.target.value })} />
+              </label>
+              <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void save()}>
+                Сохранить токен
+              </Button>
+            </div>
+          </details>
         </section>
       </div>
       <aside className="space-y-4">
@@ -234,6 +371,12 @@ export function SettingsView() {
       </aside>
     </div>
   );
+}
+
+function formatExpiry(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(date);
 }
 
 function Toggle({

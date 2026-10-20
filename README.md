@@ -28,15 +28,19 @@ npm run dev
 
 ## Подключение Instagram
 
-Нужен профессиональный аккаунт @iordani925, привязанный к странице Facebook, и приложение Meta с правами:
+Вход такой же, как у сервисов для постов: кнопка «Войти через Instagram» открывает окно самого Instagram. Публичная страница Facebook не нужна. Аккаунт @iordani925 должен быть профессиональным.
 
-- `instagram_basic`
-- `instagram_manage_comments`
-- `instagram_manage_messages`
-- `pages_show_list`
-- `pages_read_engagement`
+Один раз создайте приложение на [developers.facebook.com](https://developers.facebook.com) (войти можно личным аккаунтом Meta) и добавьте продукт Instagram → «API setup with Instagram login». В разделе «Подключение» вставьте Instagram App ID и Instagram App Secret, а в кабинете Meta — адрес возврата из панели, символ в символ. Для локальной панели откройте её как `http://localhost:4317`: Meta принимает `localhost` и сверяет адрес точно.
 
-В разделе «Подключение» вставьте токен Страницы и нажмите «Проверить подключение». Кнопка «Забрать последние комментарии» читает свежие посты без вебхука.
+Пока приложение в режиме разработки, добавьте @iordani925 как Instagram Tester и примите приглашение в самом Instagram. После входа кнопка «Забрать последние комментарии» читает свежие посты. Сессия живёт около 60 дней и продлевается сама.
+
+Права, которые запрашивает вход:
+
+- `instagram_business_basic`
+- `instagram_business_manage_comments`
+- `instagram_business_manage_messages`
+
+Готовый токен Страницы можно вставить в блоке «Токен вручную».
 
 Чтобы ответы приходили сразу, в Meta укажите вебхук:
 

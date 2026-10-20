@@ -363,6 +363,25 @@ export function saveSecrets(patch: Partial<Secrets>): Secrets {
   if (patch.igUserId) next.igUserId = patch.igUserId.trim();
   if (patch.igUsername) next.igUsername = patch.igUsername.replace(/^@/, "").trim();
   if (patch.graphVersion) next.graphVersion = patch.graphVersion.trim();
+  if (patch.igAppSecret) next.igAppSecret = patch.igAppSecret.trim();
+  if (patch.igAppId !== undefined) next.igAppId = patch.igAppId.trim();
+  if (patch.authMode === "instagram" || patch.authMode === "facebook" || patch.authMode === "") {
+    next.authMode = patch.authMode;
+  }
+  if (patch.tokenExpiresAt !== undefined) next.tokenExpiresAt = patch.tokenExpiresAt;
+  if (patch.oauthState !== undefined) next.oauthState = patch.oauthState;
+  if (patch.oauthRedirect !== undefined) next.oauthRedirect = patch.oauthRedirect;
+  putSetting(db(), "secrets", JSON.stringify(next));
+  return next;
+}
+
+export function disconnectInstagram(): Secrets {
+  const next = getSecrets();
+  next.accessToken = "";
+  next.tokenExpiresAt = "";
+  next.oauthState = "";
+  next.oauthRedirect = "";
+  next.authMode = "";
   putSetting(db(), "secrets", JSON.stringify(next));
   return next;
 }
@@ -385,6 +404,10 @@ export function getSettingsDTO(): SettingsDTO {
     igUserId: secrets.igUserId,
     igUsername: secrets.igUsername,
     graphVersion: secrets.graphVersion,
+    authMode: secrets.authMode,
+    igAppId: secrets.igAppId,
+    hasIgAppSecret: Boolean(secrets.igAppSecret),
+    tokenExpiresAt: secrets.tokenExpiresAt,
   };
 }
 

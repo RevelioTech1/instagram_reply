@@ -71,6 +71,8 @@ export type Policy = {
   phone: string;
 };
 
+export type AuthMode = "" | "instagram" | "facebook";
+
 export type Secrets = {
   accessToken: string;
   appSecret: string;
@@ -78,6 +80,12 @@ export type Secrets = {
   igUserId: string;
   igUsername: string;
   graphVersion: string;
+  authMode: AuthMode;
+  igAppId: string;
+  igAppSecret: string;
+  tokenExpiresAt: string;
+  oauthState: string;
+  oauthRedirect: string;
 };
 
 export const DEFAULT_POLICY: Policy = {
@@ -96,6 +104,12 @@ export const DEFAULT_SECRETS: Secrets = {
   igUserId: "",
   igUsername: "iordani925",
   graphVersion: "v23.0",
+  authMode: "",
+  igAppId: "",
+  igAppSecret: "",
+  tokenExpiresAt: "",
+  oauthState: "",
+  oauthRedirect: "",
 };
 
 export const CATALOG_HOME = "https://iordani.com/catalog/";

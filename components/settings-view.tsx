@@ -261,14 +261,14 @@ export function SettingsView() {
             </span>
           </label>
           <label className="block text-sm">
-            Знаки запроса цены
+            Теги запроса цены
             <Textarea
               className="mt-1 min-h-20 bg-white"
               value={symbolDraft ?? (settings.priceSymbols ?? []).join("\n")}
               onChange={(event) => setSymbolDraft(event.target.value)}
             />
             <span className="mt-1 block text-xs text-muted-foreground">
-              По одному знаку в строке. Комментарий только из этих знаков считается вопросом о цене. «++» и «+++» тоже, если в списке есть «+».
+              По одному тегу в строке. Слово вроде «хочу» и знак вроде «+» считаются вопросом о цене. «++» тоже, если в списке есть «+».
             </span>
           </label>
           <label className="block text-sm">

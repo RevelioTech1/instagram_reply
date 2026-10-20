@@ -99,7 +99,7 @@ export const DEFAULT_POLICY: Policy = {
   minConfidence: 0.82,
   includePrice: true,
   phone: "8 800 222-32-13",
-  priceSymbols: ["+", "➕", "＋"],
+  priceSymbols: ["+", "➕", "＋", "хочу", "хочу такое", "беру", "куплю", "закажу"],
   reactToPraise: true,
   praiseReplies: [
     "Здравствуйте! Спасибо, очень приятно.",

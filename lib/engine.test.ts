@@ -169,6 +169,16 @@ test("an article followed by a plus asks the price of that article", () => {
   assert.equal(result.products[0]?.code, "Б-КО-338");
 });
 
+test("a want-tag asks the price and a longer word does not", () => {
+  const want = plan("Хочу!", "Кольцо Б-КО-565 «Молитва водителя».");
+  assert.equal(want.primary, "price");
+  assert.match(want.replyPublic, /10\s100 ₽/);
+  const phrase = plan("хочу такое", "арт. Б-КО-338");
+  assert.equal(phrase.primary, "price");
+  assert.match(phrase.replyPublic, /2\s600 ₽/);
+  assert.equal(plan("хочушка", "Б-КО-338").status, "skipped");
+});
+
 test("a symbol counts only when it is in the price-sign list", () => {
   const policy = { ...DEFAULT_POLICY, priceSymbols: ["§"] };
   assert.equal(plan("+", "Б-КО-338", policy).status, "skipped");

@@ -17,18 +17,28 @@ function prepare(text: string): string {
 
 export function parsePriceSymbols(raw: string): string[] {
   const seen = new Set<string>();
-  for (const part of raw.split(/[\s,]+/)) {
-    const symbol = part.trim();
-    if (!symbol || /^[\p{L}\p{N}]+$/u.test(symbol)) continue;
-    seen.add(symbol);
+  for (const line of raw.split(/\n+/)) {
+    const trimmed = line.trim();
+    if (!trimmed || /^[\p{N}]+$/u.test(trimmed)) continue;
+    if (/[\p{L}]/u.test(trimmed)) {
+      seen.add(trimmed);
+      continue;
+    }
+    for (const part of trimmed.split(/[\s,]+/)) {
+      const symbol = part.trim();
+      if (symbol) seen.add(symbol);
+    }
   }
   return [...seen];
 }
 
 export function hasPriceSymbol(text: string, symbols: string[] = DEFAULT_POLICY.priceSymbols): boolean {
   if (symbols.length === 0 || !text.trim()) return false;
+  const signs = symbols.filter((symbol) => !isWordTag(symbol));
+  const tags = symbols.filter((symbol) => isWordTag(symbol));
   const tokens = text.trim().split(/\s+/);
-  return tokens.some((token) => isSymbolRun(token, symbols));
+  if (signs.length > 0 && tokens.some((token) => isSymbolRun(token, signs))) return true;
+  return tags.some((tag) => containsWordTag(text, tag));
 }
 
 export function classifyIntent(
@@ -99,6 +109,18 @@ function primaryOf(flags: IntentFlags): PrimaryIntent {
   if (flags.wear) return "wear";
   if (flags.other) return "other";
   return "none";
+}
+
+function isWordTag(symbol: string): boolean {
+  return /[\p{L}]/u.test(symbol);
+}
+
+function containsWordTag(text: string, tag: string): boolean {
+  const source = prepare(text);
+  const needle = prepare(tag);
+  if (!needle) return false;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}(?=$|[^\\p{L}\\p{N}])`, "u").test(source);
 }
 
 function isSymbolRun(token: string, symbols: string[]): boolean {

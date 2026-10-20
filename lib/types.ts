@@ -69,6 +69,7 @@ export type Policy = {
   minConfidence: number;
   includePrice: boolean;
   phone: string;
+  priceSymbols: string[];
 };
 
 export type AuthMode = "" | "instagram" | "facebook";
@@ -96,6 +97,7 @@ export const DEFAULT_POLICY: Policy = {
   minConfidence: 0.82,
   includePrice: true,
   phone: "8 800 222-32-13",
+  priceSymbols: ["+", "➕", "＋"],
 };
 
 export const DEFAULT_SECRETS: Secrets = {

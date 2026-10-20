@@ -23,7 +23,7 @@ export function planComment(options: {
   catalog: CatalogIndex;
   policy: Policy;
 }): Plan {
-  const { flags, primary } = classifyIntent(options.comment);
+  const { flags, primary } = classifyIntent(options.comment, options.policy.priceSymbols);
   if (primary === "none") {
     return {
       flags,

@@ -1,4 +1,4 @@
-import type { IntentFlags, PrimaryIntent } from "./types.ts";
+import { DEFAULT_POLICY, type IntentFlags, type PrimaryIntent } from "./types.ts";
 
 const EMPTY: IntentFlags = {
   price: false,
@@ -15,14 +15,36 @@ function prepare(text: string): string {
   return text.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
 }
 
-export function classifyIntent(text: string): { flags: IntentFlags; primary: PrimaryIntent } {
+export function parsePriceSymbols(raw: string): string[] {
+  const seen = new Set<string>();
+  for (const part of raw.split(/[\s,]+/)) {
+    const symbol = part.trim();
+    if (!symbol || /^[\p{L}\p{N}]+$/u.test(symbol)) continue;
+    seen.add(symbol);
+  }
+  return [...seen];
+}
+
+export function hasPriceSymbol(text: string, symbols: string[] = DEFAULT_POLICY.priceSymbols): boolean {
+  if (symbols.length === 0 || !text.trim()) return false;
+  const tokens = text.trim().split(/\s+/);
+  return tokens.some((token) => isSymbolRun(token, symbols));
+}
+
+export function classifyIntent(
+  text: string,
+  priceSymbols: string[] = DEFAULT_POLICY.priceSymbols,
+): { flags: IntentFlags; primary: PrimaryIntent } {
   const source = prepare(text);
   const flags: IntentFlags = { ...EMPTY };
-  if (!source || isReactionOnly(source)) {
-    return { flags, primary: "none" };
+  const symbolPrice = hasPriceSymbol(text, priceSymbols);
+  if (!source || (isReactionOnly(source) && !symbolPrice)) {
+    if (!symbolPrice) return { flags, primary: "none" };
+    return { flags: { ...EMPTY, price: true }, primary: "price" };
   }
 
   flags.price =
+    symbolPrice ||
     /цен[аыуеой]|сколько\s*(стоит|будет|выходит)|скок[ао]\b|скольк|поч[её]м|по\s*ч[её]м|стоимост|прайс|₽|\bруб(?:\.|лей|ля)?\b/.test(
       source,
     );
@@ -77,6 +99,19 @@ function primaryOf(flags: IntentFlags): PrimaryIntent {
   if (flags.wear) return "wear";
   if (flags.other) return "other";
   return "none";
+}
+
+function isSymbolRun(token: string, symbols: string[]): boolean {
+  const core = token.replace(/^[?!.,…。"«»'"()]+|[?!.,…。"«»'"()]+$/gu, "");
+  if (!core) return false;
+  const ordered = [...symbols].sort((left, right) => right.length - left.length);
+  let index = 0;
+  while (index < core.length) {
+    const match = ordered.find((symbol) => core.startsWith(symbol, index));
+    if (!match) return false;
+    index += match.length;
+  }
+  return true;
 }
 
 function isReactionOnly(source: string): boolean {

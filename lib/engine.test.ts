@@ -150,6 +150,31 @@ test("latin article in the comment still finds the card", () => {
   assert.match(result.replyPublic, /2\s600 ₽/);
 });
 
+test("a plus sign asks the price of the piece in the caption", () => {
+  const result = plan("+", "Кольцо Б-КО-565 «Молитва водителя».");
+  assert.equal(result.primary, "price");
+  assert.equal(result.status, "draft");
+  assert.match(result.replyPublic, /10\s100 ₽/);
+});
+
+test("repeated plus signs and a trailing question mark still ask the price", () => {
+  const result = plan("+++?", "арт. Б-КО-338");
+  assert.equal(result.primary, "price");
+  assert.match(result.replyPublic, /2\s600 ₽/);
+});
+
+test("an article followed by a plus asks the price of that article", () => {
+  const result = plan("B-KO-338 +", "Новинка недели.");
+  assert.equal(result.primary, "price");
+  assert.equal(result.products[0]?.code, "Б-КО-338");
+});
+
+test("a symbol counts only when it is in the price-sign list", () => {
+  const policy = { ...DEFAULT_POLICY, priceSymbols: ["§"] };
+  assert.equal(plan("+", "Б-КО-338", policy).status, "skipped");
+  assert.equal(plan("§", "Б-КО-338", policy).primary, "price");
+});
+
 test("a compliment is not answered", () => {
   const result = plan("Какая красота!", "Кольцо Б-КО-338 Спаси и Сохрани");
   assert.equal(result.status, "skipped");

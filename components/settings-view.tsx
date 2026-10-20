@@ -3,8 +3,10 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import type { SettingsDTO } from "@/lib/dto";
+import { parsePriceSymbols } from "@/lib/intent";
 
 type SyncState = {
   running: boolean;
@@ -24,6 +26,7 @@ export function SettingsView() {
   const [error, setError] = useState("");
   const [sync, setSync] = useState<SyncState | null>(null);
   const [busy, setBusy] = useState("");
+  const [symbolDraft, setSymbolDraft] = useState<string | null>(null);
 
   function apply(next: SettingsDTO) {
     setSettings(next);
@@ -63,6 +66,7 @@ export function SettingsView() {
       includePrice: settings.includePrice,
       minConfidence: settings.minConfidence,
       phone: settings.phone,
+      priceSymbols: parsePriceSymbols(symbolDraft ?? (settings.priceSymbols ?? []).join("\n")),
       igUserId: settings.igUserId,
       igUsername: settings.igUsername,
       graphVersion: settings.graphVersion,
@@ -130,6 +134,7 @@ export function SettingsView() {
     setError("");
     await postSettings();
     setBusy("");
+    setSymbolDraft(null);
     setNotice("Правила сохранены.");
   }
 
@@ -230,6 +235,17 @@ export function SettingsView() {
               onChange={(event) => setSettings({ ...settings, minConfidence: Number(event.target.value) })}
               className="mt-2 w-full"
             />
+          </label>
+          <label className="block text-sm">
+            Знаки запроса цены
+            <Textarea
+              className="mt-1 min-h-20 bg-white"
+              value={symbolDraft ?? (settings.priceSymbols ?? []).join("\n")}
+              onChange={(event) => setSymbolDraft(event.target.value)}
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">
+              По одному знаку в строке. Комментарий только из этих знаков считается вопросом о цене. «++» и «+++» тоже, если в списке есть «+».
+            </span>
           </label>
           <label className="block text-sm">
             Телефон в ответах про доставку

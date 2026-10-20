@@ -58,6 +58,7 @@ export type SettingsDTO = {
   minConfidence: number;
   includePrice: boolean;
   phone: string;
+  priceSymbols: string[];
   hasAccessToken: boolean;
   accessTokenHint: string;
   hasAppSecret: boolean;

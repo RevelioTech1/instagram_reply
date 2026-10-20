@@ -16,6 +16,7 @@ export async function POST(request: Request) {
     minConfidence?: number;
     includePrice?: boolean;
     phone?: string;
+    priceSymbols?: string[];
     accessToken?: string;
     appSecret?: string;
     igUserId?: string;
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
     ...(body.minConfidence !== undefined ? { minConfidence: body.minConfidence } : {}),
     ...(body.includePrice !== undefined ? { includePrice: body.includePrice } : {}),
     ...(body.phone !== undefined ? { phone: body.phone } : {}),
+    ...(body.priceSymbols !== undefined ? { priceSymbols: body.priceSymbols } : {}),
   });
   if (body.disconnect) {
     await revokeInstagramAccess();

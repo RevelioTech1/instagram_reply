@@ -69,6 +69,7 @@ export type SettingsDTO = {
   igAppId: string;
   hasIgAppSecret: boolean;
   tokenExpiresAt: string;
+  publicOrigin: string;
 };
 
 export type StatsDTO = {

@@ -14,7 +14,7 @@ export function GET(request: Request) {
       }),
     );
   }
-  const redirectUri = callbackUri(request);
+  const redirectUri = callbackUri(request, secrets.publicOrigin);
   const state = crypto.randomBytes(16).toString("hex");
   saveSecrets({ oauthState: state, oauthRedirect: redirectUri });
   return Response.redirect(instagramAuthorizeUrl({ appId: secrets.igAppId, redirectUri, state }));

@@ -86,6 +86,7 @@ export type Secrets = {
   tokenExpiresAt: string;
   oauthState: string;
   oauthRedirect: string;
+  publicOrigin: string;
 };
 
 export const DEFAULT_POLICY: Policy = {
@@ -110,6 +111,7 @@ export const DEFAULT_SECRETS: Secrets = {
   tokenExpiresAt: "",
   oauthState: "",
   oauthRedirect: "",
+  publicOrigin: "",
 };
 
 export const CATALOG_HOME = "https://iordani.com/catalog/";

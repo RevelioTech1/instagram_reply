@@ -27,6 +27,7 @@ export async function POST(request: Request) {
     clearAccessToken?: boolean;
     clearAppSecret?: boolean;
     disconnect?: boolean;
+    publicOrigin?: string;
   };
   savePolicy({
     ...(body.autoReply !== undefined ? { autoReply: body.autoReply } : {}),
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
     igAppId: body.igAppId,
     igAppSecret: body.igAppSecret,
     authMode: body.authMode,
+    publicOrigin: body.publicOrigin,
   });
   return Response.json(getSettingsDTO());
 }

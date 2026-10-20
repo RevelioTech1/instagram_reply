@@ -67,6 +67,7 @@ export function SettingsView() {
       igUsername: settings.igUsername,
       graphVersion: settings.graphVersion,
       igAppId: settings.igAppId,
+      publicOrigin: settings.publicOrigin,
       ...extra,
     };
   }
@@ -180,7 +181,8 @@ export function SettingsView() {
     return <p className="text-sm text-muted-foreground">{error || "Открываем настройки…"}</p>;
   }
 
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  const browserOrigin = typeof window === "undefined" ? "" : window.location.origin;
+  const origin = (settings.publicOrigin || browserOrigin).replace(/\/$/, "");
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -302,13 +304,9 @@ export function SettingsView() {
             >
               Скопировать адрес
             </Button>
-            {origin.startsWith("https://") ? (
-              <p className="mt-2 text-xs text-[#8a6a32]">Вставьте этот адрес в приложение Meta без изменений.</p>
-            ) : (
-              <p className="mt-2 text-xs text-[#8a6a32]">
-                Meta не сохраняет такой адрес. Окну входа нужен https, и localhost оно не принимает. Откройте панель по публичному https-адресу и вставьте уже тот адрес возврата.
-              </p>
-            )}
+            <p className="mt-2 text-xs text-[#8a6a32]">
+              Кнопка «Войти через Instagram» отправляет в Instagram именно эту строку. В кабинете Meta должна быть она же, без слэша на конце. Адрес с localhost Instagram отклоняет.
+            </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button className="h-9" disabled={busy !== ""} onClick={() => void connectInstagram()}>

@@ -371,6 +371,7 @@ export function saveSecrets(patch: Partial<Secrets>): Secrets {
   if (patch.tokenExpiresAt !== undefined) next.tokenExpiresAt = patch.tokenExpiresAt;
   if (patch.oauthState !== undefined) next.oauthState = patch.oauthState;
   if (patch.oauthRedirect !== undefined) next.oauthRedirect = patch.oauthRedirect;
+  if (patch.publicOrigin !== undefined) next.publicOrigin = patch.publicOrigin.trim().replace(/\/$/, "");
   putSetting(db(), "secrets", JSON.stringify(next));
   return next;
 }
@@ -408,6 +409,7 @@ export function getSettingsDTO(): SettingsDTO {
     igAppId: secrets.igAppId,
     hasIgAppSecret: Boolean(secrets.igAppSecret),
     tokenExpiresAt: secrets.tokenExpiresAt,
+    publicOrigin: secrets.publicOrigin,
   };
 }
 

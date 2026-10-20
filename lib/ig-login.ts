@@ -76,8 +76,10 @@ export function requestOrigin(request: HeaderSource): string {
   return fallback.origin;
 }
 
-export function callbackUri(request: HeaderSource): string {
-  return `${requestOrigin(request)}/api/instagram/callback`;
+export function callbackUri(request: HeaderSource, publicOrigin = ""): string {
+  const configured = publicOrigin.trim().replace(/\/$/, "");
+  const origin = configured.startsWith("https://") ? configured : requestOrigin(request);
+  return `${origin}/api/instagram/callback`;
 }
 
 export function settingsLocation(request: HeaderSource, params: Record<string, string>): string {

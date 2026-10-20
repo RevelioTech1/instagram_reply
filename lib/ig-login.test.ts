@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { instagramAuthorizeUrl, parseLongLivedToken, parseTokenResponse, requestOrigin } from "./ig-login.ts";
+import { callbackUri, instagramAuthorizeUrl, parseLongLivedToken, parseTokenResponse, requestOrigin } from "./ig-login.ts";
 
 test("ссылка входа ведёт в Instagram и просит права на комментарии", () => {
   const url = new URL(
@@ -29,6 +29,17 @@ test("короткий токен читается и из обёртки data, 
     accessToken: "flat",
     userId: "7",
   });
+});
+
+test("вход отправляет сохранённый https-адрес, даже если панель открыта на localhost", () => {
+  const uri = callbackUri(
+    {
+      url: "http://localhost:4317/api/instagram/login",
+      headers: { get: (name) => (name === "host" ? "localhost:4317" : null) },
+    },
+    "https://panel.example.com/",
+  );
+  assert.equal(uri, "https://panel.example.com/api/instagram/callback");
 });
 
 test("адрес возврата берётся из браузера, а не из 0.0.0.0", () => {

@@ -1,0 +1,374 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import type { CommentDTO, ProductDTO } from "@/lib/dto";
+import { formatPrice } from "@/lib/format";
+import { INTENT_LABEL, SOURCE_LABEL, STATUS_LABEL } from "@/lib/labels";
+
+const FILTERS = [
+  { id: "", label: "Все" },
+  { id: "draft", label: "Ждут" },
+  { id: "needs_review", label: "Проверка" },
+  { id: "replied", label: "Ответы" },
+  { id: "skipped", label: "Без ответа" },
+  { id: "failed", label: "Ошибки" },
+];
+
+const PRESETS = [
+  {
+    label: "Цена под постом с артикулом",
+    caption: "Кольцо «Спаси и Сохрани», артикул Б-КО-338. Серебро 925.",
+    text: "Добрый день! Сколько стоит?",
+  },
+  {
+    label: "Серьги, хотя в кадре ещё кольцо",
+    caption: "В кадре кольцо Б-КО-338 и серьги Б-С-073.",
+    text: "А серёжки почём будут?",
+  },
+  {
+    label: "Артикул латиницей",
+    caption: "Новинка недели.",
+    text: "B-KO-565 сколько?",
+  },
+  {
+    label: "Просто комплимент",
+    caption: "Кольцо Б-КО-338 Спаси и Сохрани",
+    text: "Какая красота!",
+  },
+];
+
+export function Inbox() {
+  const [filter, setFilter] = useState("");
+  const [comments, setComments] = useState<CommentDTO[] | null>(null);
+  const [error, setError] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [caption, setCaption] = useState(PRESETS[0].caption);
+  const [text, setText] = useState(PRESETS[0].text);
+  const [busy, setBusy] = useState(false);
+
+  async function load(prefer?: string) {
+    const response = await fetch(filter ? `/api/comments?status=${filter}` : "/api/comments");
+    if (!response.ok) {
+      setError("Не удалось открыть входящие.");
+      return;
+    }
+    const data = (await response.json()) as { comments: CommentDTO[] };
+    setComments(data.comments);
+    setError("");
+    setSelectedId((current) => {
+      if (prefer && data.comments.some((comment) => comment.id === prefer)) return prefer;
+      if (current && data.comments.some((comment) => comment.id === current)) return current;
+      return data.comments.find((comment) => comment.status === "draft")?.id ?? data.comments[0]?.id ?? null;
+    });
+  }
+
+  useEffect(() => {
+    let stop = false;
+    void (async () => {
+      if (stop) return;
+      await load();
+    })();
+    const timer = window.setInterval(() => void load(), 12000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
+    // load closes over filter; the interval should follow it
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter]);
+
+  const selected = useMemo(
+    () => comments?.find((comment) => comment.id === selectedId) ?? null,
+    [comments, selectedId],
+  );
+
+  async function simulate() {
+    setBusy(true);
+    const response = await fetch("/api/comments/simulate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, caption }),
+    });
+    const data = (await response.json()) as { comment?: CommentDTO; error?: string };
+    setBusy(false);
+    if (!response.ok || !data.comment) {
+      setError(data.error || "Не удалось разобрать комментарий.");
+      return;
+    }
+    setFilter("");
+    await load(data.comment.id);
+  }
+
+  return (
+    <div className="grid min-w-0 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+      <section className={`min-w-0 space-y-4 ${selected ? "hidden lg:block" : "block"}`}>
+        <div className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-4">
+          <p className="text-xs tracking-[0.16em] text-[#8c6a32] uppercase">Проверить фразу</p>
+          <p className="mt-1 text-sm text-[#3d342b]">
+            Вставьте подпись поста и комментарий. Бот найдёт карточку и покажет ответ, не публикуя его.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {PRESETS.map((preset) => (
+              <button
+                key={preset.label}
+                type="button"
+                className="rounded-full bg-[#efe6d4] px-2.5 py-1 text-left text-xs text-[#3d342b] hover:bg-[#e5d8c0]"
+                onClick={() => {
+                  setCaption(preset.caption);
+                  setText(preset.text);
+                }}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+          <label className="mt-3 block text-xs text-muted-foreground">
+            Подпись поста
+            <Textarea className="mt-1 min-h-16 bg-white" value={caption} onChange={(event) => setCaption(event.target.value)} />
+          </label>
+          <label className="mt-2 block text-xs text-muted-foreground">
+            Комментарий
+            <Textarea className="mt-1 min-h-16 bg-white" value={text} onChange={(event) => setText(event.target.value)} />
+          </label>
+          <Button className="mt-3 h-9 w-full" disabled={busy || !text.trim()} onClick={() => void simulate()}>
+            {busy ? "Разбираем…" : "Собрать ответ"}
+          </Button>
+        </div>
+        <div className="flex min-w-0 gap-1 overflow-x-auto">
+          {FILTERS.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setFilter(item.id)}
+              className={`rounded-full px-3 py-1 text-xs whitespace-nowrap ${
+                filter === item.id ? "bg-[#24382c] text-[#f6f3ea]" : "bg-white text-[#3d342b]"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <div className="max-h-[70vh] space-y-2 overflow-auto pr-1">
+          {comments === null ? <p className="text-sm text-muted-foreground">Открываем входящие…</p> : null}
+          {comments?.length === 0 ? (
+            <p className="rounded-2xl border border-dashed border-[#e4d8c4] p-4 text-sm text-muted-foreground">
+              Таких комментариев нет. Проверьте фразу выше или заберите посты в разделе «Подключение».
+            </p>
+          ) : null}
+          {comments?.map((comment) => (
+            <button
+              key={comment.id}
+              type="button"
+              onClick={() => setSelectedId(comment.id)}
+              className={`w-full rounded-2xl border p-3 text-left ${
+                selectedId === comment.id ? "border-[#6d2e32] bg-[#fffdf8]" : "border-transparent bg-white/70"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs text-[#8c6a32]">{SOURCE_LABEL[comment.source] ?? comment.source}</span>
+                <span className="text-xs text-muted-foreground">{STATUS_LABEL[comment.status]}</span>
+              </div>
+              <p className="mt-1 line-clamp-2 text-sm">{comment.text}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {INTENT_LABEL[comment.primaryIntent]}
+                {comment.products[0] ? ` · ${comment.products[0].code}` : ""}
+              </p>
+            </button>
+          ))}
+        </div>
+      </section>
+      <section className={`min-w-0 ${selected ? "block" : "hidden lg:block"}`}>
+        {selected ? (
+          <button type="button" className="mb-3 text-sm text-[#6d2e32] lg:hidden" onClick={() => setSelectedId(null)}>
+            ← К списку
+          </button>
+        ) : null}
+        {error ? <p className="mb-3 text-sm text-[#9b2c2c]">{error}</p> : null}
+        {selected ? (
+          <CommentDetail
+            comment={selected}
+            onChange={(comment) => {
+              setComments((current) => current?.map((item) => (item.id === comment.id ? comment : item)) ?? [comment]);
+            }}
+          />
+        ) : (
+          <div className="rounded-3xl border border-dashed border-[#e4d8c4] bg-[#fffdf8] p-8 text-sm text-muted-foreground">
+            Выберите комментарий слева. Учебные примеры уже лежат во входящих: так мастерская видит тон ответа до
+            подключения Instagram.
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function CommentDetail({
+  comment,
+  onChange,
+}: {
+  comment: CommentDTO;
+  onChange: (comment: CommentDTO) => void;
+}) {
+  const [replyPublic, setReplyPublic] = useState(comment.replyPublic);
+  const [replyPrivate, setReplyPrivate] = useState(comment.replyPrivate);
+  const [manualCode, setManualCode] = useState("");
+  const [busy, setBusy] = useState("");
+
+  useEffect(() => {
+    setReplyPublic(comment.replyPublic);
+    setReplyPrivate(comment.replyPrivate);
+    setManualCode("");
+  }, [comment.id, comment.replyPublic, comment.replyPrivate]);
+
+  async function act(path: string, body?: unknown) {
+    setBusy(path);
+    const response = await fetch(path, {
+      method: path.endsWith("/skip") ? "POST" : "PATCH",
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = (await response.json()) as { comment?: CommentDTO; error?: string };
+    setBusy("");
+    if (data.comment) onChange(data.comment);
+  }
+
+  async function send() {
+    setBusy("send");
+    await fetch(`/api/comments/${comment.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ replyPublic, replyPrivate }),
+    });
+    const response = await fetch(`/api/comments/${comment.id}/send`, { method: "POST" });
+    const data = (await response.json()) as { comment?: CommentDTO };
+    setBusy("");
+    if (data.comment) onChange(data.comment);
+  }
+
+  const local = comment.delivery === "local";
+  const canSend = comment.status !== "skipped" && (replyPublic.trim() || replyPrivate.trim());
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{INTENT_LABEL[comment.primaryIntent]}</Badge>
+          <Badge variant="outline">{STATUS_LABEL[comment.status]}</Badge>
+          <span className="text-xs text-muted-foreground">{Math.round(comment.confidence * 100)}% уверенности</span>
+        </div>
+        <p className="mt-4 font-display text-3xl leading-tight text-[#2a211c]">{comment.text}</p>
+        <p className="mt-3 text-sm text-[#5c5348]">{comment.reason}</p>
+        <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Подпись поста</p>
+        <p className="mt-1 text-sm whitespace-pre-wrap text-[#3d342b]">
+          {comment.post.caption || "Подписи нет. Добавьте артикул в пост или привяжите изделие вручную."}
+        </p>
+        {comment.post.permalink ? (
+          <a className="mt-2 inline-block text-sm text-[#6d2e32] underline" href={comment.post.permalink} target="_blank" rel="noreferrer">
+            Открыть пост
+          </a>
+        ) : null}
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        {comment.products.length === 0 ? (
+          <div className="rounded-3xl border border-dashed border-[#e4d8c4] bg-white/60 p-4 text-sm text-muted-foreground md:col-span-2">
+            Карточка не выбрана: бот не называет цену наугад и просит артикул.
+          </div>
+        ) : (
+          comment.products.map((product) => <ProductCard key={product.url} product={product} />)
+        )}
+      </div>
+
+      {comment.status !== "skipped" ? (
+        <div className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
+          <p className="text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Как это выглядит в комментарии</p>
+          <Textarea className="mt-3 min-h-32 bg-white" value={replyPublic} onChange={(event) => setReplyPublic(event.target.value)} />
+          <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Личное сообщение со ссылкой</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            В комментарии ссылка часто не нажимается. В директ она приходит рабочей, одно сообщение на комментарий.
+          </p>
+          <Textarea className="mt-2 min-h-32 bg-white" value={replyPrivate} onChange={(event) => setReplyPrivate(event.target.value)} />
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+            <Button className="h-9" disabled={!canSend || busy !== ""} onClick={() => void send()}>
+              {comment.source === "demo" || comment.source === "simulator" ? "Сохранить как ответ" : "Отправить в Instagram"}
+            </Button>
+            <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void act(`/api/comments/${comment.id}/skip`)}>
+              Не отвечать
+            </Button>
+            <Button
+              variant="secondary"
+              className="h-9"
+              disabled={busy !== ""}
+              onClick={() => void act(`/api/comments/${comment.id}`, { replyPublic, replyPrivate })}
+            >
+              Запомнить правку
+            </Button>
+          </div>
+          {local ? (
+            <p className="mt-3 text-sm text-[#1c3b2c]">
+              Ответ сохранён локально. В Instagram он не ушёл: это учебный комментарий, живого id у него нет.
+            </p>
+          ) : null}
+          {comment.delivery === "instagram" ? (
+            <p className="mt-3 text-sm text-[#1c3b2c]">Ответ ушёл в Instagram.</p>
+          ) : null}
+          {comment.replyError ? <p className="mt-3 text-sm text-[#9b2c2c]">{comment.replyError}</p> : null}
+          <form
+            className="mt-4 flex flex-col gap-2 border-t border-[#efe6d4] pt-4 sm:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void act(`/api/comments/${comment.id}`, { manualCode });
+            }}
+          >
+            <input
+              value={manualCode}
+              onChange={(event) => setManualCode(event.target.value)}
+              placeholder="Другой артикул, если бот промахнулся"
+              className="h-9 flex-1 rounded-lg border border-[#e4d8c4] bg-white px-3 text-sm"
+            />
+            <Button type="submit" variant="outline" className="h-9" disabled={!manualCode.trim() || busy !== ""}>
+              Привязать
+            </Button>
+          </form>
+        </div>
+      ) : (
+        <div className="rounded-3xl bg-[#24382c] p-5 text-[#f6f3ea]">
+          <p className="font-display text-2xl">Ответ не нужен</p>
+          <p className="mt-2 text-sm text-[#d7e3da]">
+            Комплименты и реакции бот не комментирует, чтобы лента не заполнялась одинаковыми «спасибо».
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProductCard({ product }: { product: ProductDTO }) {
+  return (
+    <a
+      href={product.url}
+      target="_blank"
+      rel="noreferrer"
+      className="flex gap-3 rounded-3xl border border-[#e4d8c4] bg-white p-3 hover:border-[#8c6a32]"
+    >
+      {product.image ? (
+        // Catalog photos are served by the shop; next/image would require a remote allowlist for every upload path.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={product.image} alt="" className="h-24 w-20 rounded-2xl object-cover" />
+      ) : (
+        <div className="h-24 w-20 rounded-2xl bg-[#efe6d4]" />
+      )}
+      <div>
+        <p className="text-xs text-[#8c6a32]">{product.category}</p>
+        <p className="font-medium text-[#2a211c]">{product.title}</p>
+        <p className="mt-1 text-sm">{formatPrice(product.price) ?? "цену смотрите в карточке"}</p>
+        <p className="text-xs text-muted-foreground">
+          {[product.metal, product.size ? `размер ${product.size.toLowerCase()}` : ""].filter(Boolean).join(" · ")}
+        </p>
+      </div>
+    </a>
+  );
+}

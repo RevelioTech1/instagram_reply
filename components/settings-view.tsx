@@ -1,0 +1,259 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import type { SettingsDTO } from "@/lib/dto";
+
+type SyncState = {
+  running: boolean;
+  scanned: number;
+  total: number;
+  saved: number;
+  error: string | null;
+  finishedAt: string | null;
+};
+
+export function SettingsView() {
+  const [settings, setSettings] = useState<SettingsDTO | null>(null);
+  const [token, setToken] = useState("");
+  const [secret, setSecret] = useState("");
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
+  const [sync, setSync] = useState<SyncState | null>(null);
+  const [busy, setBusy] = useState("");
+
+  function apply(next: SettingsDTO) {
+    setSettings(next);
+  }
+
+  useEffect(() => {
+    fetch("/api/settings")
+      .then((response) => response.json())
+      .then((data: SettingsDTO) => apply(data))
+      .catch(() => setError("Настройки не открылись."));
+  }, []);
+
+  useEffect(() => {
+    if (!sync?.running) return;
+    const timer = window.setInterval(() => {
+      fetch("/api/catalog/sync")
+        .then((response) => response.json())
+        .then((data: SyncState) => setSync(data))
+        .catch(() => undefined);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [sync?.running]);
+
+  async function save() {
+    if (!settings) return;
+    setBusy("save");
+    const response = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        autoReply: settings.autoReply,
+        publicReply: settings.publicReply,
+        privateReply: settings.privateReply,
+        includePrice: settings.includePrice,
+        minConfidence: settings.minConfidence,
+        phone: settings.phone,
+        igUserId: settings.igUserId,
+        igUsername: settings.igUsername,
+        graphVersion: settings.graphVersion,
+        accessToken: token,
+        appSecret: secret,
+      }),
+    });
+    const data = (await response.json()) as SettingsDTO;
+    apply(data);
+    setToken("");
+    setSecret("");
+    setBusy("");
+    setNotice("Сохранили.");
+    setError("");
+  }
+
+  async function test() {
+    setBusy("test");
+    setNotice("");
+    setError("");
+    if (token || settings) await save();
+    const response = await fetch("/api/instagram/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessToken: token || undefined }),
+    });
+    const data = (await response.json()) as { message?: string };
+    setBusy("");
+    if (!response.ok) setError(data.message || "Подключение не удалось.");
+    else {
+      setNotice(data.message || "Подключено.");
+      const fresh = (await fetch("/api/settings").then((item) => item.json())) as SettingsDTO;
+      apply(fresh);
+    }
+  }
+
+  async function poll() {
+    setBusy("poll");
+    setNotice("");
+    setError("");
+    const response = await fetch("/api/instagram/poll", { method: "POST" });
+    const data = (await response.json()) as { message?: string };
+    setBusy("");
+    if (!response.ok) setError(data.message || "Не удалось забрать комментарии.");
+    else setNotice(data.message || "Готово. Новые вопросы лежат во входящих.");
+  }
+
+  async function refreshCatalog() {
+    setBusy("sync");
+    const response = await fetch("/api/catalog/sync", { method: "POST" });
+    setSync((await response.json()) as SyncState);
+    setBusy("");
+  }
+
+  if (!settings) {
+    return <p className="text-sm text-muted-foreground">{error || "Открываем настройки…"}</p>;
+  }
+
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="space-y-6">
+        <div>
+          <h1 className="font-display text-5xl text-[#2a211c]">Подключение @iordani925</h1>
+          <p className="mt-2 max-w-2xl text-sm text-[#5c5348]">
+            Пока автоответ выключен, бот только готовит текст. В Instagram ничего не уходит, пока вы не нажмёте
+            «Отправить» или не включите автоответ.
+          </p>
+        </div>
+        <section className="space-y-4 rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
+          <Toggle
+            label="Автоответ"
+            hint="Уверенные вопросы о цене, наличии, размере и доставке уходят сами. Сомнительные остаются на проверке."
+            checked={settings.autoReply}
+            onChange={(autoReply) => setSettings({ ...settings, autoReply })}
+          />
+          <Toggle
+            label="Ответ в комментарии"
+            hint="Короткий текст с ценой и ссылкой на карточку."
+            checked={settings.publicReply}
+            onChange={(publicReply) => setSettings({ ...settings, publicReply })}
+          />
+          <Toggle
+            label="Ссылка в директ"
+            hint="Одно личное сообщение на комментарий. Там ссылка обычно нажимается."
+            checked={settings.privateReply}
+            onChange={(privateReply) => setSettings({ ...settings, privateReply })}
+          />
+          <Toggle
+            label="Называть цену, даже если спросили только ссылку"
+            hint="Если человек просит цену, сумма всё равно берётся из карточки."
+            checked={settings.includePrice}
+            onChange={(includePrice) => setSettings({ ...settings, includePrice })}
+          />
+          <label className="block text-sm">
+            Порог автоответа, {Math.round(settings.minConfidence * 100)}%
+            <input
+              type="range"
+              min={0.6}
+              max={0.98}
+              step={0.01}
+              value={settings.minConfidence}
+              onChange={(event) => setSettings({ ...settings, minConfidence: Number(event.target.value) })}
+              className="mt-2 w-full"
+            />
+          </label>
+          <label className="block text-sm">
+            Телефон в ответах про доставку
+            <Input className="mt-1 h-9 bg-white" value={settings.phone} onChange={(event) => setSettings({ ...settings, phone: event.target.value })} />
+          </label>
+        </section>
+        <section className="space-y-3 rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
+          <h2 className="font-display text-3xl">Токен</h2>
+          <p className="text-sm text-[#5c5348]">
+            Нужен токен Страницы Facebook, к которой привязан профессиональный аккаунт @iordani925. Права:
+            instagram_manage_comments, instagram_manage_messages, instagram_basic, pages_read_engagement.
+          </p>
+          <label className="block text-sm">
+            Токен {settings.hasAccessToken ? `(сохранён ${settings.accessTokenHint})` : ""}
+            <Input className="mt-1 h-9 bg-white" type="password" value={token} placeholder="Вставьте новый токен" onChange={(event) => setToken(event.target.value)} />
+          </label>
+          <label className="block text-sm">
+            Секрет приложения, для подписи вебхука
+            <Input className="mt-1 h-9 bg-white" type="password" value={secret} placeholder={settings.hasAppSecret ? "Секрет уже сохранён" : "Необязательно до публикации"} onChange={(event) => setSecret(event.target.value)} />
+          </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm">
+              Имя аккаунта
+              <Input className="mt-1 h-9 bg-white" value={settings.igUsername} onChange={(event) => setSettings({ ...settings, igUsername: event.target.value })} />
+            </label>
+            <label className="block text-sm">
+              Id Instagram
+              <Input className="mt-1 h-9 bg-white" value={settings.igUserId} onChange={(event) => setSettings({ ...settings, igUserId: event.target.value })} />
+            </label>
+          </div>
+          <label className="block text-sm">
+            Версия Graph API
+            <Input className="mt-1 h-9 bg-white" value={settings.graphVersion} onChange={(event) => setSettings({ ...settings, graphVersion: event.target.value })} />
+          </label>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button className="h-9" disabled={busy !== ""} onClick={() => void save()}>
+              Сохранить
+            </Button>
+            <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void test()}>
+              Проверить подключение
+            </Button>
+            <Button variant="secondary" className="h-9" disabled={busy !== ""} onClick={() => void poll()}>
+              Забрать последние комментарии
+            </Button>
+          </div>
+          {notice ? <p className="text-sm text-[#1c3b2c]">{notice}</p> : null}
+          {error ? <p className="text-sm text-[#9b2c2c]">{error}</p> : null}
+        </section>
+      </div>
+      <aside className="space-y-4">
+        <section className="rounded-3xl bg-[#24382c] p-5 text-[#f6f3ea]">
+          <p className="text-xs tracking-[0.16em] text-[#d7c39a] uppercase">Вебхук Meta</p>
+          <p className="mt-3 text-sm break-all">{origin}/api/instagram/webhook</p>
+          <p className="mt-4 text-xs tracking-[0.16em] text-[#d7c39a] uppercase">Проверочный токен</p>
+          <p className="mt-2 text-sm break-all">{settings.verifyToken}</p>
+          <p className="mt-4 text-sm text-[#d7e3da]">Подписка на поле comments. Пока нет публичного адреса, работает кнопка «Забрать последние комментарии».</p>
+        </section>
+        <section className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
+          <h2 className="font-display text-3xl">Цены с сайта</h2>
+          <p className="mt-2 text-sm text-[#5c5348]">Обновление проходит по всем карточкам и занимает пару минут. Старые цены остаются, пока загрузка не закончится.</p>
+          <Button variant="outline" className="mt-4 h-9" disabled={busy === "sync" || sync?.running} onClick={() => void refreshCatalog()}>
+            {sync?.running ? `Обновляем ${sync.scanned} из ${sync.total}` : "Обновить каталог"}
+          </Button>
+          {sync?.saved ? <p className="mt-2 text-sm">Сохранили {sync.saved} карточек.</p> : null}
+          {sync?.error ? <p className="mt-2 text-sm text-[#9b2c2c]">{sync.error}</p> : null}
+        </section>
+      </aside>
+    </div>
+  );
+}
+
+function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
+      </div>
+      <Switch checked={checked} onCheckedChange={onChange} />
+    </div>
+  );
+}

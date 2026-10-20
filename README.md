@@ -30,7 +30,7 @@ npm run dev
 
 Вход такой же, как у сервисов для постов: кнопка «Войти через Instagram» открывает окно самого Instagram. Публичная страница Facebook не нужна. Аккаунт @iordani925 должен быть профессиональным.
 
-Один раз создайте приложение на [developers.facebook.com](https://developers.facebook.com) (войти можно личным аккаунтом Meta) и добавьте продукт Instagram → «API setup with Instagram login». В разделе «Подключение» вставьте Instagram App ID и Instagram App Secret, а в кабинете Meta — адрес возврата из панели, символ в символ. Для локальной панели откройте её как `http://localhost:4317`: Meta принимает `localhost` и сверяет адрес точно.
+Один раз создайте приложение в [списке приложений Meta](https://developers.facebook.com/apps/) (войти можно личным аккаунтом Meta). Витрина «Платформа Instagram» приложение не создаёт. В мастере выберите сценарий «Manage messaging & content on Instagram», затем внутри приложения откройте Instagram → «API setup with Instagram business login». В раздел «Подключение» вставьте Instagram App ID и Instagram App Secret именно оттуда, а в кабинет Meta — адрес возврата из панели, символ в символ. Для локальной панели откройте её как `http://localhost:4317`: Meta принимает `localhost` и сверяет адрес точно.
 
 Пока приложение в режиме разработки, добавьте @iordani925 как Instagram Tester и примите приглашение в самом Instagram. После входа кнопка «Забрать последние комментарии» читает свежие посты. Сессия живёт около 60 дней и продлевается сама.
 

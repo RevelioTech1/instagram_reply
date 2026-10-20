@@ -251,12 +251,23 @@ export function SettingsView() {
             </div>
           ) : null}
           <ol className="list-decimal space-y-2 pl-5 text-sm text-[#5c5348]">
-            <li>Откройте developers.facebook.com и создайте приложение типа Business. Войти можно личным аккаунтом Meta — это кабинет разработчика, не страница бренда.</li>
-            <li>Добавьте продукт Instagram и откройте «API setup with Instagram login».</li>
-            <li>Скопируйте сюда Instagram App ID и Instagram App Secret.</li>
-            <li>В том же окне вставьте адрес возврата ниже, символ в символ.</li>
-            <li>Пока приложение в режиме разработки, добавьте @iordani925 в роли Instagram Tester и примите приглашение в Instagram.</li>
-            <li>Нажмите «Войти через Instagram» и войдите в профессиональный аккаунт @iordani925.</li>
+            <li>
+              Откройте{" "}
+              <a className="underline" href="https://developers.facebook.com/apps/" target="_blank" rel="noreferrer">
+                список приложений
+              </a>
+              . Страница «Платформа Instagram» в меню продуктов — витрина, кнопки создания там нет. Справа сверху может быть «Начать»: это регистрация разработчика, войти можно личным аккаунтом Meta.
+            </li>
+            <li>
+              Нажмите «Создать приложение». В сценариях выберите пункт про сообщения и контент Instagram — «Manage messaging & content on Instagram». Типа «Business» и кнопки «добавить продукт» в этом мастере нет.
+            </li>
+            <li>Дальше имя (без слов Insta, Gram и IG), почта и «Создать приложение». Meta может спросить пароль ещё раз.</li>
+            <li>
+              Уже внутри приложения откройте Instagram → «API setup with Instagram business login». Скопируйте оттуда Instagram App ID и Instagram App Secret. Это не номер из «Настройки → Основные».
+            </li>
+            <li>В блоке Business login settings вставьте адрес возврата ниже и сохраните.</li>
+            <li>Пока приложение в режиме разработки, добавьте @iordani925 как Instagram Tester и примите приглашение в Instagram.</li>
+            <li>Вернитесь сюда и нажмите «Войти через Instagram».</li>
           </ol>
           <label className="block text-sm">
             Instagram App ID

@@ -17,37 +17,11 @@ const FILTERS = [
   { id: "failed", label: "Ошибки" },
 ];
 
-const PRESETS = [
-  {
-    label: "Цена под постом с артикулом",
-    caption: "Кольцо «Спаси и Сохрани», артикул Б-КО-338. Серебро 925.",
-    text: "Добрый день! Сколько стоит?",
-  },
-  {
-    label: "Серьги, хотя в кадре ещё кольцо",
-    caption: "В кадре кольцо Б-КО-338 и серьги Б-С-073.",
-    text: "А серёжки почём будут?",
-  },
-  {
-    label: "Артикул латиницей",
-    caption: "Новинка недели.",
-    text: "B-KO-565 сколько?",
-  },
-  {
-    label: "Просто комплимент",
-    caption: "Кольцо Б-КО-338 Спаси и Сохрани",
-    text: "Какая красота!",
-  },
-];
-
 export function Inbox() {
   const [filter, setFilter] = useState("");
   const [comments, setComments] = useState<CommentDTO[] | null>(null);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [caption, setCaption] = useState(PRESETS[0].caption);
-  const [text, setText] = useState(PRESETS[0].text);
-  const [busy, setBusy] = useState(false);
 
   async function load(prefer?: string) {
     const response = await fetch(filter ? `/api/comments?status=${filter}` : "/api/comments");
@@ -85,58 +59,9 @@ export function Inbox() {
     [comments, selectedId],
   );
 
-  async function simulate() {
-    setBusy(true);
-    const response = await fetch("/api/comments/simulate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, caption }),
-    });
-    const data = (await response.json()) as { comment?: CommentDTO; error?: string };
-    setBusy(false);
-    if (!response.ok || !data.comment) {
-      setError(data.error || "Не удалось разобрать комментарий.");
-      return;
-    }
-    setFilter("");
-    await load(data.comment.id);
-  }
-
   return (
     <div className="grid min-w-0 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
       <section className={`min-w-0 space-y-4 ${selected ? "hidden lg:block" : "block"}`}>
-        <div className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-4">
-          <p className="text-xs tracking-[0.16em] text-[#8c6a32] uppercase">Проверить фразу</p>
-          <p className="mt-1 text-sm text-[#3d342b]">
-            Вставьте подпись поста и комментарий. Бот найдёт карточку и покажет ответ, не публикуя его.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {PRESETS.map((preset) => (
-              <button
-                key={preset.label}
-                type="button"
-                className="rounded-full bg-[#efe6d4] px-2.5 py-1 text-left text-xs text-[#3d342b] hover:bg-[#e5d8c0]"
-                onClick={() => {
-                  setCaption(preset.caption);
-                  setText(preset.text);
-                }}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-          <label className="mt-3 block text-xs text-muted-foreground">
-            Подпись поста
-            <Textarea className="mt-1 min-h-16 bg-white" value={caption} onChange={(event) => setCaption(event.target.value)} />
-          </label>
-          <label className="mt-2 block text-xs text-muted-foreground">
-            Комментарий
-            <Textarea className="mt-1 min-h-16 bg-white" value={text} onChange={(event) => setText(event.target.value)} />
-          </label>
-          <Button className="mt-3 h-9 w-full" disabled={busy || !text.trim()} onClick={() => void simulate()}>
-            {busy ? "Разбираем…" : "Собрать ответ"}
-          </Button>
-        </div>
         <div className="flex min-w-0 gap-1 overflow-x-auto">
           {FILTERS.map((item) => (
             <button
@@ -155,7 +80,7 @@ export function Inbox() {
           {comments === null ? <p className="text-sm text-muted-foreground">Открываем входящие…</p> : null}
           {comments?.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-[#e4d8c4] p-4 text-sm text-muted-foreground">
-              Таких комментариев нет. Проверьте фразу выше или заберите посты в разделе «Подключение».
+              Таких комментариев нет. Заберите их в разделе «Подключение».
             </p>
           ) : null}
           {comments?.map((comment) => (

@@ -302,12 +302,12 @@ export function SettingsView() {
             >
               Скопировать адрес
             </Button>
-            {origin.startsWith("http://127.0.0.1") ? (
-              <p className="mt-2 text-xs text-[#8a6a32]">
-                Для локального входа откройте панель как http://localhost:4317. Meta сверяет адрес символ в символ.
-              </p>
-            ) : (
+            {origin.startsWith("https://") ? (
               <p className="mt-2 text-xs text-[#8a6a32]">Вставьте этот адрес в приложение Meta без изменений.</p>
+            ) : (
+              <p className="mt-2 text-xs text-[#8a6a32]">
+                Meta не сохраняет такой адрес. Окну входа нужен https, и localhost оно не принимает. Откройте панель по публичному https-адресу и вставьте уже тот адрес возврата.
+              </p>
             )}
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">

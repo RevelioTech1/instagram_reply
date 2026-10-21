@@ -139,3 +139,7 @@ npm test
 
 - `data/concierge.sqlite` и соседние файлы базы. Там токен Instagram.
 - `node_modules` и `.next`. Они собираются заново командами выше.
+
+## Production deployment
+
+Docker Compose, GitHub Actions и настройка `insta.iordani.info` описаны в [deploy/README.md](deploy/README.md).

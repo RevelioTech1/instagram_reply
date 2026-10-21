@@ -1,0 +1,7 @@
+[Unit]
+Description=Enable Instagram HTTPS once DNS points to this VPS
+After=network-online.target nginx.service
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/insta-enable-https

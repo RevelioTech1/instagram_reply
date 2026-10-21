@@ -1,0 +1,35 @@
+name: Deploy insta.iordani.info
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-insta-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          test -n "$DEPLOY_SSH_KEY"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo '[104.248.120.210]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB68jZOuWnQ02gXdbfvvOMifML0IqHNLErBEyHt02jl0' > ~/.ssh/known_hosts
+      - name: Upload source
+        run: |
+          rsync -az --delete --exclude='.git/' --exclude='node_modules/' --exclude='.next/' --exclude='.env*' \
+            -e 'ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -p 2222' \
+            ./ root@104.248.120.210:/home/web/insta/
+      - name: Build and deploy
+        run: ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -p 2222 root@104.248.120.210 'bash /home/web/insta/deploy/deploy.sh'
+      - name: Remove SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

@@ -1,3 +1,4 @@
+import { extractProductImage } from "./catalog-image.ts";
 import {
   catalogSyncEnabled,
   DEFAULT_CATALOG_SYNC_INTERVAL_MS,
@@ -200,15 +201,14 @@ async function fetchProduct(url: string): Promise<RawProduct | null> {
       const value = strip(block[2]);
       if (key && value) props[key] = value;
     }
-    let image = meta(html, "image");
-    if (image.startsWith("/")) image = `https://iordani.com${image}`;
+    const image = extractProductImage(html);
     const slug = url.replace("https://iordani.com", "").split("/").filter(Boolean)[1] ?? "";
     return {
       url: url.replace("http://", "https://"),
       skuRaw,
       title,
       price: /^\d+$/.test(priceRaw) ? Number(priceRaw) : null,
-      image: image || null,
+      image,
       description: strip(descriptionMatch?.[1] ?? "").slice(0, 700),
       availability,
       props,

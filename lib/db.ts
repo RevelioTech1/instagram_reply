@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { buildIndex, prepareProduct, type CatalogIndex } from "./catalog.ts";
+import { mergeProductImages } from "./catalog-image.ts";
 import type { CommentDTO, PostDTO, ProductDTO, SettingsDTO, StatsDTO } from "./dto.ts";
 import { parsePriceSymbols } from "./intent.ts";
 import { planComment } from "./plan.ts";
@@ -592,6 +593,11 @@ export function replanComment(id: string, manualCode?: string | null): CommentDT
 
 export function replaceProducts(items: RawProduct[]): number {
   const database = db();
+  const previousRows = database.prepare("select url, image from products").all() as SqlRow[];
+  const previousByUrl = new Map(
+    previousRows.map((row) => [String(row.url), row.image == null ? null : String(row.image)] as const),
+  );
+  const merged = mergeProductImages(items, previousByUrl);
   const insert = database.prepare(`
     insert into products(url, sku_raw, title, price, image, description, availability, props_json, category, category_slug)
     values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -599,7 +605,7 @@ export function replaceProducts(items: RawProduct[]): number {
   database.exec("begin");
   try {
     database.exec("delete from products");
-    for (const item of items) {
+    for (const item of merged) {
       insert.run(
         item.url,
         item.skuRaw,
@@ -619,12 +625,12 @@ export function replaceProducts(items: RawProduct[]): number {
     throw error;
   }
   const file = catalogFile();
-  fs.writeFileSync(file, JSON.stringify(items));
+  fs.writeFileSync(file, JSON.stringify(merged));
   const stat = fs.statSync(file);
   putSetting(database, "catalog_stamp", `${stat.size}:${Math.round(stat.mtimeMs)}`);
   putSetting(database, "catalog_synced_at", new Date().toISOString());
   invalidateCatalog();
-  return items.length;
+  return merged.length;
 }
 
 export function searchProducts(query: string, category: string | null, limit = 48): ProductDTO[] {

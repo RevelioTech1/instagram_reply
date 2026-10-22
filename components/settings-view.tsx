@@ -139,7 +139,9 @@ export function SettingsView() {
     setError("");
     await postSettings({ disconnect: true });
     setBusy("");
-    setNotice("Вышли из Instagram. Панель больше не отвечает от имени аккаунта.");
+    setNotice(
+      "Вышли из Instagram в панели. Если при следующем входе снова откроется старый аккаунт — это сессия Instagram в браузере: выйдите из неё на instagram.com или откройте вход в режиме инкогнито.",
+    );
   }
 
   async function saveRules() {

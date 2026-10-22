@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { callbackUri, instagramAuthorizeUrl, parseLongLivedToken, parseTokenResponse, requestOrigin } from "./ig-login.ts";
+import {
+  callbackUri,
+  instagramAuthorizeUrl,
+  instagramLoginRedirectUrl,
+  parseLongLivedToken,
+  parseTokenResponse,
+  requestOrigin,
+} from "./ig-login.ts";
 
 test("ссылка входа ведёт в Instagram и просит права на комментарии", () => {
   const url = new URL(
@@ -18,6 +25,21 @@ test("ссылка входа ведёт в Instagram и просит права
   assert.equal(url.searchParams.get("state"), "abc");
   assert.match(url.searchParams.get("scope") ?? "", /instagram_business_manage_comments/);
   assert.match(url.searchParams.get("scope") ?? "", /instagram_business_manage_messages/);
+});
+
+test("перед OAuth сбрасывается текущая сессия Instagram", () => {
+  const url = new URL(
+    instagramLoginRedirectUrl({
+      appId: "123",
+      redirectUri: "https://insta.iordani.info/api/instagram/callback",
+      state: "abc",
+    }),
+  );
+  assert.equal(url.pathname, "/accounts/logout/");
+  const next = new URL(url.searchParams.get("continue") ?? "");
+  assert.equal(next.pathname, "/oauth/authorize");
+  assert.equal(next.searchParams.get("force_authentication"), "1");
+  assert.equal(next.searchParams.get("client_id"), "123");
 });
 
 test("короткий токен читается и из обёртки data, и из плоского ответа", () => {

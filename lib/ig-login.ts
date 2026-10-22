@@ -20,6 +20,21 @@ export function instagramAuthorizeUrl(input: {
   return url.toString();
 }
 
+/**
+ * Drop the browser's current Instagram session first, then open OAuth.
+ * Otherwise Instagram keeps offering the last account (e.g. revelioceo).
+ */
+export function instagramLoginRedirectUrl(input: {
+  appId: string;
+  redirectUri: string;
+  state: string;
+}): string {
+  const authorize = instagramAuthorizeUrl(input);
+  const logout = new URL("https://www.instagram.com/accounts/logout/");
+  logout.searchParams.set("continue", authorize);
+  return logout.toString();
+}
+
 export function parseTokenResponse(payload: unknown): { accessToken: string; userId: string } {
   const record = tokenRecord(payload);
   const token = record?.access_token;

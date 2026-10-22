@@ -21,6 +21,17 @@ type SyncState = {
   intervalMs: number;
 };
 
+type CommentScanState = {
+  running: boolean;
+  mediaScanned: number;
+  unrepliedFound: number;
+  ingested: number;
+  removedAnswered: number;
+  orphansRemoved: number;
+  error: string | null;
+  finishedAt: string | null;
+};
+
 export function SettingsView() {
   const [settings, setSettings] = useState<SettingsDTO | null>(null);
   const [token, setToken] = useState("");
@@ -29,6 +40,7 @@ export function SettingsView() {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [sync, setSync] = useState<SyncState | null>(null);
+  const [scan, setScan] = useState<CommentScanState | null>(null);
   const [busy, setBusy] = useState("");
   const [symbolDraft, setSymbolDraft] = useState<string | null>(null);
   const [praiseDraft, setPraiseDraft] = useState<string | null>(null);
@@ -53,6 +65,10 @@ export function SettingsView() {
       .then((response) => response.json())
       .then((data: SyncState) => setSync(data))
       .catch(() => undefined);
+    fetch("/api/instagram/scan")
+      .then((response) => response.json())
+      .then((data: CommentScanState) => setScan(data))
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -65,6 +81,24 @@ export function SettingsView() {
     }, 1500);
     return () => window.clearInterval(timer);
   }, [sync?.running]);
+
+  useEffect(() => {
+    if (!scan?.running) return;
+    const timer = window.setInterval(() => {
+      fetch("/api/instagram/scan")
+        .then((response) => response.json())
+        .then((data: CommentScanState) => {
+          setScan(data);
+          if (!data.running && data.finishedAt) {
+            setNotice(
+              `Скан постов: неотвеченных ${data.unrepliedFound} (новых ${data.ingested}), убрали отвеченных вне панели ${data.removedAnswered}.`,
+            );
+          }
+        })
+        .catch(() => undefined);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [scan?.running]);
 
   function payload(extra: Record<string, unknown> = {}) {
     if (!settings) return null;
@@ -190,6 +224,18 @@ export function SettingsView() {
     setBusy("");
     if (!response.ok) setError(data.message || "Не удалось забрать комментарии.");
     else setNotice(data.message || "Готово. Новые вопросы лежат во входящих.");
+  }
+
+  async function scanAllPosts() {
+    setBusy("scan");
+    setNotice("");
+    setError("");
+    const response = await fetch("/api/instagram/scan", { method: "POST" });
+    const data = (await response.json()) as CommentScanState & { message?: string };
+    setScan(data);
+    setBusy("");
+    if (!response.ok) setError(data.message || "Не удалось запустить скан.");
+    else setNotice("Сканируем все посты Instagram — это может занять несколько минут.");
   }
 
   async function refreshCatalog() {
@@ -367,8 +413,11 @@ export function SettingsView() {
             <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void test()}>
               Проверить подключение
             </Button>
-            <Button variant="secondary" className="h-9" disabled={busy !== ""} onClick={() => void poll()}>
+            <Button variant="secondary" className="h-9" disabled={busy !== "" || Boolean(scan?.running)} onClick={() => void poll()}>
               Забрать последние комментарии
+            </Button>
+            <Button variant="outline" className="h-9" disabled={busy !== "" || Boolean(scan?.running)} onClick={() => void scanAllPosts()}>
+              {scan?.running ? `Скан постов: ${scan.mediaScanned}` : "Пройти все посты"}
             </Button>
             {settings.hasAccessToken ? (
               <Button variant="ghost" className="h-9" disabled={busy !== ""} onClick={() => void disconnect()}>
@@ -376,6 +425,20 @@ export function SettingsView() {
               </Button>
             ) : null}
           </div>
+          {scan?.running ? (
+            <p className="text-sm text-[#5c5348]">
+              Идём по ленте Instagram: просмотрено постов {scan.mediaScanned}. Берутся только комментарии без
+              публичного ответа от аккаунта магазина; уже отвеченные вне панели из входящих убираются.
+            </p>
+          ) : null}
+          {scan && !scan.running && scan.finishedAt ? (
+            <p className="text-sm text-[#5c5348]">
+              Последний полный скан: неотвеченных {scan.unrepliedFound}, новых {scan.ingested}, убрано отвеченных{" "}
+              {scan.removedAnswered}
+              {scan.orphansRemoved ? `, пустых постов ${scan.orphansRemoved}` : ""}.
+            </p>
+          ) : null}
+          {scan?.error ? <p className="text-sm break-words text-[#9b2c2c]">{scan.error}</p> : null}
           {notice ? <p className="text-sm text-[#1c3b2c]">{notice}</p> : null}
           {error ? <p className="text-sm break-words text-[#9b2c2c]">{error}</p> : null}
           <details className="rounded-2xl border border-[#e4d8c4] px-4 py-3">

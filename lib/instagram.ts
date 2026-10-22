@@ -1,5 +1,6 @@
-import { getSecrets, saveSecrets } from "./db.ts";
+import { getSecrets, isOwnAccount, saveSecrets } from "./db.ts";
 import { expiryFromNow, instagramErrorMessage } from "./ig-login.ts";
+import { commentAuthor, hasBusinessReply, type IgCommentNode } from "./ig-replies.ts";
 import type { AuthMode } from "./types.ts";
 
 type GraphError = { error?: { message?: string } };
@@ -188,47 +189,163 @@ export async function fetchMedia(mediaId: string): Promise<{
   };
 }
 
-export async function fetchRecentComments(): Promise<RemoteComment[]> {
-  await refreshInstagramTokenIfNeeded();
+const COMMENT_FIELDS =
+  "id,text,username,timestamp,from{id,username},replies.limit(50){id,text,username,from{id,username}}";
+
+type MediaPageItem = {
+  id: string;
+  caption?: string;
+  permalink?: string;
+  media_url?: string;
+  thumbnail_url?: string;
+  comments?: {
+    data?: IgCommentNode[];
+    paging?: { cursors?: { after?: string }; next?: string };
+  };
+};
+
+type Paged<T> = {
+  data?: T[];
+  paging?: { cursors?: { after?: string }; next?: string };
+};
+
+function ownIdentity() {
   const secrets = getSecrets();
+  const names = ["iordani925", secrets.igUsername].filter(Boolean);
+  const ids = [secrets.igUserId].filter(Boolean);
+  return { names, ids, secrets };
+}
+
+export async function fetchRecentComments(): Promise<RemoteComment[]> {
+  const { unreplied } = await collectCommentsFromMedia({ mediaLimit: 8, commentsPerMedia: 25 });
+  return unreplied;
+}
+
+export type ScanCommentHit = RemoteComment & { answeredOutside: boolean };
+
+/**
+ * Walk Instagram media (optionally all pages) and split comments into unreplied vs
+ * already answered publicly by the shop account.
+ */
+export async function collectCommentsFromMedia(options: {
+  mediaLimit?: number | null;
+  commentsPerMedia?: number;
+  onMedia?: (info: { scanned: number; mediaId: string }) => void;
+}): Promise<{ unreplied: RemoteComment[]; answered: RemoteComment[] }> {
+  await refreshInstagramTokenIfNeeded();
+  const { names, ids, secrets } = ownIdentity();
   if (!secrets.accessToken || !secrets.igUserId) {
     throw new Error("Сначала проверьте подключение: нужен токен и id аккаунта Instagram.");
   }
-  const payload = await graph<{
-    data?: Array<{
-      id: string;
-      caption?: string;
-      permalink?: string;
-      media_url?: string;
-      thumbnail_url?: string;
-      comments?: { data?: Array<{ id: string; text?: string; username?: string; timestamp?: string }> };
-    }>;
-  }>(`${secrets.igUserId}/media`, {
-    token: secrets.accessToken,
-    version: secrets.graphVersion || "v23.0",
-    query: {
-      fields:
-        "id,caption,permalink,media_url,thumbnail_url,timestamp,comments.limit(25){id,text,username,timestamp}",
-      limit: "8",
-    },
-  });
-  const comments: RemoteComment[] = [];
-  for (const media of payload.data ?? []) {
-    for (const comment of media.comments?.data ?? []) {
-      if (!comment.text) continue;
-      comments.push({
-        id: comment.id,
-        text: comment.text,
-        username: comment.username || "instagram",
-        timestamp: comment.timestamp,
-        mediaId: media.id,
-        caption: media.caption ?? "",
-        permalink: media.permalink ?? null,
-        mediaUrl: media.media_url ?? media.thumbnail_url ?? null,
+  const version = secrets.graphVersion || "v23.0";
+  const token = secrets.accessToken;
+  const unreplied: RemoteComment[] = [];
+  const answered: RemoteComment[] = [];
+  const commentsPerMedia = options.commentsPerMedia ?? 50;
+  let after: string | undefined;
+  let scanned = 0;
+  let fetchedMedia = 0;
+  const maxMedia = options.mediaLimit ?? null;
+
+  while (maxMedia === null || fetchedMedia < maxMedia) {
+    const pageSize = maxMedia === null ? 25 : Math.min(25, maxMedia - fetchedMedia);
+    const page = await graph<Paged<MediaPageItem>>(`${secrets.igUserId}/media`, {
+      token,
+      version,
+      authMode: secrets.authMode,
+      query: {
+        fields: `id,caption,permalink,media_url,thumbnail_url,timestamp,comments.limit(${commentsPerMedia}){${COMMENT_FIELDS}}`,
+        limit: String(pageSize),
+        ...(after ? { after } : {}),
+      },
+    });
+    const items = page.data ?? [];
+    if (!items.length) break;
+    for (const media of items) {
+      scanned += 1;
+      fetchedMedia += 1;
+      options.onMedia?.({ scanned, mediaId: media.id });
+      const nodes = await listMediaComments(media, {
+        token,
+        version,
+        authMode: secrets.authMode,
+        pageSize: commentsPerMedia,
       });
+      for (const comment of nodes) {
+        if (!comment.text) continue;
+        const author = commentAuthor(comment);
+        if (isOwnAccount(author.username || "instagram")) continue;
+        const remote: RemoteComment = {
+          id: comment.id,
+          text: comment.text,
+          username: author.username || "instagram",
+          timestamp: comment.timestamp,
+          mediaId: media.id,
+          caption: media.caption ?? "",
+          permalink: media.permalink ?? null,
+          mediaUrl: media.media_url ?? media.thumbnail_url ?? null,
+        };
+        if (hasBusinessReply(comment, names, ids)) answered.push(remote);
+        else unreplied.push(remote);
+      }
     }
+    after = page.paging?.cursors?.after;
+    if (!after || items.length < pageSize) break;
   }
-  return comments;
+
+  return { unreplied, answered };
+}
+
+async function listMediaComments(
+  media: MediaPageItem,
+  options: { token: string; version: string; authMode: AuthMode; pageSize: number },
+): Promise<IgCommentNode[]> {
+  const collected: IgCommentNode[] = [...(media.comments?.data ?? [])];
+  let after = media.comments?.paging?.cursors?.after;
+  while (after) {
+    const page = await graph<Paged<IgCommentNode>>(`${media.id}/comments`, {
+      token: options.token,
+      version: options.version,
+      authMode: options.authMode,
+      query: {
+        fields: COMMENT_FIELDS,
+        limit: String(options.pageSize),
+        after,
+      },
+    });
+    collected.push(...(page.data ?? []));
+    after = page.paging?.cursors?.after;
+    if (!(page.data?.length ?? 0)) break;
+  }
+  for (const comment of collected) {
+    await expandReplies(comment, options);
+  }
+  return collected;
+}
+
+async function expandReplies(
+  comment: IgCommentNode,
+  options: { token: string; version: string; authMode: AuthMode; pageSize: number },
+): Promise<void> {
+  if (!comment.replies) comment.replies = { data: [] };
+  const data = comment.replies.data ?? [];
+  comment.replies.data = data;
+  let after = comment.replies.paging?.cursors?.after;
+  while (after) {
+    const page = await graph<Paged<IgCommentNode>>(`${comment.id}/replies`, {
+      token: options.token,
+      version: options.version,
+      authMode: options.authMode,
+      query: {
+        fields: "id,text,username,from{id,username}",
+        limit: String(options.pageSize),
+        after,
+      },
+    });
+    data.push(...(page.data ?? []));
+    after = page.paging?.cursors?.after;
+    if (!(page.data?.length ?? 0)) break;
+  }
 }
 
 export async function publishPublicReply(commentId: string, message: string): Promise<string | null> {

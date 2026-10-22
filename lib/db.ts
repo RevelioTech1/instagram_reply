@@ -368,6 +368,19 @@ export function getComment(id: string): CommentDTO | null {
   return row ? commentFromRow(row) : null;
 }
 
+export function deleteComment(id: string): boolean {
+  const result = db().prepare("delete from comments where id = ?").run(id) as { changes?: number };
+  return Number(result.changes ?? 0) > 0;
+}
+
+/** Drop posts that no longer have any stored comments. */
+export function deleteOrphanPosts(): number {
+  const result = db()
+    .prepare("delete from posts where media_id not in (select distinct media_id from comments)")
+    .run() as { changes?: number };
+  return Number(result.changes ?? 0);
+}
+
 function commentFromRow(row: SqlRow): CommentDTO {
   const post = getPost(String(row.media_id));
   return {

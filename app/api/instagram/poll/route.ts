@@ -1,4 +1,5 @@
-import { fetchRecentComments } from "@/lib/instagram";
+import { deleteComment, deleteOrphanPosts, getComment } from "@/lib/db";
+import { collectCommentsFromMedia } from "@/lib/instagram";
 import { ingestComment } from "@/lib/process";
 
 export const dynamic = "force-dynamic";
@@ -6,9 +7,21 @@ export const runtime = "nodejs";
 
 export async function POST() {
   try {
-    const remote = await fetchRecentComments();
-    for (const comment of remote) {
-      await ingestComment({
+    const { unreplied, answered } = await collectCommentsFromMedia({
+      mediaLimit: 8,
+      commentsPerMedia: 25,
+    });
+    let removed = 0;
+    for (const comment of answered) {
+      const existing = getComment(comment.id);
+      if (!existing) continue;
+      if (existing.delivery === "instagram" || existing.delivery === "local") continue;
+      if (deleteComment(comment.id)) removed += 1;
+    }
+    let ingested = 0;
+    for (const comment of unreplied) {
+      const before = getComment(comment.id);
+      const saved = await ingestComment({
         id: comment.id,
         mediaId: comment.mediaId,
         username: comment.username,
@@ -19,8 +32,17 @@ export async function POST() {
         permalink: comment.permalink,
         mediaUrl: comment.mediaUrl,
       });
+      if (saved && !before) ingested += 1;
     }
-    return Response.json({ ok: true, seen: remote.length, message: `Просмотрели ${remote.length} комментариев.` });
+    deleteOrphanPosts();
+    return Response.json({
+      ok: true,
+      seen: unreplied.length + answered.length,
+      unreplied: unreplied.length,
+      ingested,
+      removed,
+      message: `Неотвеченных: ${unreplied.length} (новых ${ingested}). Убрали уже отвеченных вне панели: ${removed}.`,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось забрать комментарии.";
     return Response.json({ ok: false, message }, { status: 400 });

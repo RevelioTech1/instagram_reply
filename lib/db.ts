@@ -21,7 +21,8 @@ const require = createRequire(import.meta.url);
 const { DatabaseSync: SqliteHandle } = require("node:sqlite") as typeof import("node:sqlite");
 type SqliteHandle = InstanceType<typeof SqliteHandle>;
 
-const DEMO_VERSION = "1";
+/** Bump when demo cleanup rules change. "0" = demos removed, never re-seeded. */
+const DEMO_VERSION = "0";
 
 type SqlRow = Record<string, unknown>;
 
@@ -39,7 +40,7 @@ function db(): SqliteHandle {
     database.exec("pragma journal_mode = wal");
     migrate(database);
     importSnapshot(database);
-    seedDemo(database);
+    clearDemoContent(database);
     globalDb.__iordaniDb = database;
   }
   return globalDb.__iordaniDb;
@@ -149,115 +150,11 @@ function importSnapshot(database: SqliteHandle): void {
   invalidateCatalog();
 }
 
-function seedDemo(database: SqliteHandle): void {
+/** Remove seeded demo posts/comments once; do not recreate them. */
+function clearDemoContent(database: SqliteHandle): void {
   if (setting(database, "demo_version") === DEMO_VERSION) return;
   database.prepare("delete from comments where source = 'demo'").run();
   database.prepare("delete from posts where source = 'demo'").run();
-  const index = readIndex(database);
-  const policy = readPolicy(database);
-  const scenarios: Array<{
-    id: string;
-    mediaId: string;
-    caption: string;
-    text: string;
-    username: string;
-    minutesAgo: number;
-  }> = [
-    {
-      id: "demo-price",
-      mediaId: "demo-post-ring",
-      caption: "Кольцо «Спаси и Сохрани», артикул Б-КО-338. Серебро 925 — молитва всегда рядом.",
-      text: "Подскажите, пожалуйста, сколько стоит?",
-      username: "пример",
-      minutesAgo: 12,
-    },
-    {
-      id: "demo-size",
-      mediaId: "demo-post-ring",
-      caption: "Кольцо «Спаси и Сохрани», артикул Б-КО-338. Серебро 925 — молитва всегда рядом.",
-      text: "А какой размер и из чего сделано?",
-      username: "пример",
-      minutesAgo: 40,
-    },
-    {
-      id: "demo-earrings",
-      mediaId: "demo-post-pair",
-      caption: "В кадре кольцо Б-КО-338 и серьги Б-С-073 «Вера, Надежда, Любовь».",
-      text: "А серёжки почём?",
-      username: "пример",
-      minutesAgo: 75,
-    },
-    {
-      id: "demo-ship",
-      mediaId: "demo-post-matrona",
-      caption: "Подвеска Б-П-184 Матрона. Освящённый образ, серебро 925.",
-      text: "Есть в наличии? И доставка в Казань как проходит?",
-      username: "пример",
-      minutesAgo: 140,
-    },
-    {
-      id: "demo-wear",
-      mediaId: "demo-post-driver",
-      caption: "Кольцо Б-КО-565 «Молитва водителя».",
-      text: "Можно ли носить каждый день?",
-      username: "пример",
-      minutesAgo: 200,
-    },
-    {
-      id: "demo-praise",
-      mediaId: "demo-post-ring",
-      caption: "Кольцо «Спаси и Сохрани», артикул Б-КО-338. Серебро 925 — молитва всегда рядом.",
-      text: "Какая красота!",
-      username: "пример",
-      minutesAgo: 260,
-    },
-    {
-      id: "demo-vague",
-      mediaId: "demo-post-vague",
-      caption: "Тихий кадр с верстака. Серебро, молитва, ручная работа.",
-      text: "Сколько стоит спаси и сохрани?",
-      username: "пример",
-      minutesAgo: 300,
-    },
-  ];
-  const insertPost = database.prepare(
-    "insert into posts(media_id, caption, permalink, media_url, manual_code, source, created_at) values (?, ?, null, null, null, 'demo', ?)",
-  );
-  const insertComment = database.prepare(`
-    insert into comments(
-      id, media_id, username, text, created_at, source, primary_intent, flags_json, status,
-      confidence, reason, product_urls_json, reply_public, reply_private, reply_error, delivery, manual_code
-    ) values (?, ?, ?, ?, ?, 'demo', ?, ?, ?, ?, ?, ?, ?, ?, null, 'none', null)
-  `);
-  const seenPosts = new Set<string>();
-  for (const scenario of scenarios) {
-    const createdAt = new Date(Date.now() - scenario.minutesAgo * 60_000).toISOString();
-    if (!seenPosts.has(scenario.mediaId)) {
-      insertPost.run(scenario.mediaId, scenario.caption, createdAt);
-      seenPosts.add(scenario.mediaId);
-    }
-    const plan = planComment({
-      comment: scenario.text,
-      caption: scenario.caption,
-      catalog: index,
-      policy,
-    });
-    insertComment.run(
-      scenario.id,
-      scenario.mediaId,
-      scenario.username,
-      scenario.text,
-      createdAt,
-      plan.primary,
-      JSON.stringify(plan.flags),
-      plan.status === "send" ? "draft" : plan.status,
-      plan.confidence,
-      plan.reason,
-      JSON.stringify(plan.products.map((product) => product.url)),
-      plan.replyPublic,
-      plan.replyPrivate,
-    );
-  }
   putSetting(database, "demo_version", DEMO_VERSION);
 }
 

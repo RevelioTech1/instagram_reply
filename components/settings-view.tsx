@@ -467,8 +467,8 @@ function formatSyncTime(iso: string | null | undefined): string {
 
 function formatInterval(ms: number): string {
   const minutes = Math.max(1, Math.round(ms / 60_000));
-  if (minutes < 90) return `${minutes} мин`;
-  const hours = Math.round(minutes / 60);
+  if (minutes < 50) return `${minutes} мин`;
+  const hours = Math.max(1, Math.round(minutes / 60));
   if (hours === 1) return "час";
   if (hours >= 2 && hours <= 4) return `${hours} часа`;
   return `${hours} часов`;

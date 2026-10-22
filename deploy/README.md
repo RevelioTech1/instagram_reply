@@ -6,9 +6,13 @@
 - Docker Compose project `insta`; app listens only on `127.0.0.1:4317`.
 - SQLite and the catalog live in named volume `insta_app-data` mounted at `/app/data`.
   Never run `docker compose down -v` on production.
-- nginx protects the panel with Basic Auth; `/api/instagram/webhook` remains public
-  for Meta's verification/signature checks. Credentials are outside Git in
-  `/etc/nginx/insta.htpasswd`.
+- The app itself requires Basic Auth via `PANEL_USER` / `PANEL_PASSWORD` (compose
+  reads them from the host environment or a `.env` next to `compose.yaml`).
+  Without `PANEL_PASSWORD` the container will not start. `/api/instagram/webhook`
+  and `/api/health` stay public; webhook POSTs are rejected unless App Secret is
+  saved in the panel and `X-Hub-Signature-256` matches.
+- nginx may still keep an outer Basic Auth as defense in depth; credentials for
+  that layer stay outside Git in `/etc/nginx/insta.htpasswd`.
 
 ## GitHub Actions
 
@@ -20,6 +24,9 @@ The matching public key is installed on this VPS; the host key is pinned in the 
 GitHub Actions uploads the checkout, builds and tests the Docker image, backs up
 SQLite, and recreates the container with a health check. Jobs do not cancel an
 in-progress deployment. VPS access to GitHub is not required.
+
+Ensure `PANEL_PASSWORD` (and optional `PANEL_USER`) are set on the VPS for Compose,
+for example in `/home/web/insta/.env` (not in Git).
 
 Manual deploy from the local checkout:
 

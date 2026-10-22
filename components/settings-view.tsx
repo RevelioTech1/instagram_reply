@@ -381,7 +381,7 @@ export function SettingsView() {
               </label>
               <label className="block text-sm">
                 Секрет приложения, для подписи вебхука
-                <Input className="mt-1 h-9 bg-white" type="password" value={secret} placeholder={settings.hasAppSecret ? "Секрет уже сохранён" : "Необязательно, пока вебхук локальный"} autoComplete="off" onChange={(event) => setSecret(event.target.value)} />
+                <Input className="mt-1 h-9 bg-white" type="password" value={secret} placeholder={settings.hasAppSecret ? "Секрет уже сохранён" : "Обязателен для вебхука"} autoComplete="off" onChange={(event) => setSecret(event.target.value)} />
               </label>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block text-sm">
@@ -410,7 +410,7 @@ export function SettingsView() {
           <p className="mt-3 text-sm break-all">{origin}/api/instagram/webhook</p>
           <p className="mt-4 text-xs tracking-[0.16em] text-[#d7c39a] uppercase">Проверочный токен</p>
           <p className="mt-2 text-sm break-all">{settings.verifyToken}</p>
-          <p className="mt-4 text-sm text-[#d7e3da]">Подписка на поле comments. Пока нет публичного адреса, работает кнопка «Забрать последние комментарии».</p>
+          <p className="mt-4 text-sm text-[#d7e3da]">Подписка на поле comments. Без секрета приложения Meta вебхук отклоняет запросы. Пока нет публичного адреса, работает кнопка «Забрать последние комментарии».</p>
         </section>
         <section className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
           <h2 className="font-display text-3xl">Цены с сайта</h2>

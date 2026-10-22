@@ -1,6 +1,6 @@
-import crypto from "node:crypto";
 import { getSecrets } from "@/lib/db";
 import { ingestComment } from "@/lib/process";
+import { webhookPostAllowed } from "@/lib/webhook-signature";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -34,8 +34,9 @@ type WebhookPayload = {
 export async function POST(request: Request) {
   const raw = await request.text();
   const secrets = getSecrets();
-  if (secrets.appSecret && !validSignature(raw, request.headers.get("x-hub-signature-256"), secrets.appSecret)) {
-    return new Response("invalid signature", { status: 403 });
+  const gate = webhookPostAllowed(raw, request.headers.get("x-hub-signature-256"), secrets.appSecret);
+  if (!gate.ok) {
+    return new Response(gate.body, { status: gate.status });
   }
   let payload: WebhookPayload;
   try {
@@ -58,13 +59,4 @@ export async function POST(request: Request) {
     }
   }
   return new Response("ok", { status: 200 });
-}
-
-function validSignature(raw: string, header: string | null, secret: string): boolean {
-  if (!header) return false;
-  const expected = `sha256=${crypto.createHmac("sha256", secret).update(raw).digest("hex")}`;
-  const left = Buffer.from(header);
-  const right = Buffer.from(expected);
-  if (left.length !== right.length) return false;
-  return crypto.timingSafeEqual(left, right);
 }

@@ -28,8 +28,14 @@ GitHub Actions uploads the checkout, builds and tests the Docker image, backs up
 SQLite, and recreates the container with a health check. Jobs do not cancel an
 in-progress deployment. VPS access to GitHub is not required.
 
-Ensure `PANEL_PASSWORD` (and optional `PANEL_USER`) are set on the VPS for Compose,
-for example in `/home/web/insta/.env` (not in Git).
+Compose needs `PANEL_PASSWORD` on the VPS in `/home/web/insta/.env` (not in Git).
+If that file is missing, `deploy/deploy.sh` creates one with a random password and
+prints it once in the deploy log. To rotate later:
+
+```sh
+ssh revelio-ny 'nano /home/web/insta/.env'   # set PANEL_USER / PANEL_PASSWORD
+ssh revelio-ny 'cd /home/web/insta && docker compose up -d'
+```
 
 Manual deploy from the local checkout:
 

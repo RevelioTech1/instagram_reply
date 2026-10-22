@@ -73,6 +73,7 @@ export type SettingsDTO = {
   hasIgAppSecret: boolean;
   tokenExpiresAt: string;
   publicOrigin: string;
+  catalogSyncedAt: string;
 };
 
 export type StatsDTO = {

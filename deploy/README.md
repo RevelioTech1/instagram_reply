@@ -6,6 +6,9 @@
 - Docker Compose project `insta`; app listens only on `127.0.0.1:4317`.
 - SQLite and the catalog live in named volume `insta_app-data` mounted at `/app/data`.
   Never run `docker compose down -v` on production.
+- The Node process refreshes the catalog from iordani.com about once an hour
+  (`CATALOG_SYNC_INTERVAL_MS`, default `3600000`). A failed crawl keeps the
+  previous snapshot and retries after `CATALOG_SYNC_RETRY_MS` (default 15 min).
 - The app itself requires Basic Auth via `PANEL_USER` / `PANEL_PASSWORD` (compose
   reads them from the host environment or a `.env` next to `compose.yaml`).
   Without `PANEL_PASSWORD` the container will not start. `/api/instagram/webhook`

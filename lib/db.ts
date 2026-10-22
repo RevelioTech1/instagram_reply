@@ -402,6 +402,10 @@ export function clearSecret(key: "accessToken" | "appSecret"): void {
   putSetting(db(), "secrets", JSON.stringify(next));
 }
 
+export function getCatalogSyncedAt(): string | null {
+  return setting(db(), "catalog_synced_at");
+}
+
 export function getSettingsDTO(): SettingsDTO {
   const policy = getPolicy();
   const secrets = getSecrets();
@@ -419,6 +423,7 @@ export function getSettingsDTO(): SettingsDTO {
     hasIgAppSecret: Boolean(secrets.igAppSecret),
     tokenExpiresAt: secrets.tokenExpiresAt,
     publicOrigin: secrets.publicOrigin,
+    catalogSyncedAt: getCatalogSyncedAt() ?? "",
   };
 }
 

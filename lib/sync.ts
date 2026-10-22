@@ -1,4 +1,13 @@
-import { replaceProducts } from "./db.ts";
+import {
+  catalogSyncEnabled,
+  DEFAULT_CATALOG_SYNC_INTERVAL_MS,
+  DEFAULT_CATALOG_SYNC_RETRY_MS,
+  DEFAULT_CATALOG_SYNC_STARTUP_DELAY_MS,
+  DEFAULT_CATALOG_SYNC_TICK_MS,
+  readIntervalMs,
+  shouldRunScheduledSync,
+} from "./catalog-schedule.ts";
+import { getCatalogSyncedAt, replaceProducts } from "./db.ts";
 import type { RawProduct } from "./types.ts";
 
 const CATEGORIES: Record<string, string> = {
@@ -24,6 +33,10 @@ export type SyncState = {
   saved: number;
   error: string | null;
   finishedAt: string | null;
+  lastSyncedAt: string | null;
+  trigger: "manual" | "schedule" | null;
+  autoEnabled: boolean;
+  intervalMs: number;
 };
 
 const state: SyncState = {
@@ -33,13 +46,28 @@ const state: SyncState = {
   saved: 0,
   error: null,
   finishedAt: null,
+  lastSyncedAt: null,
+  trigger: null,
+  autoEnabled: true,
+  intervalMs: DEFAULT_CATALOG_SYNC_INTERVAL_MS,
 };
 
+let lastAttemptAtMs: number | null = null;
+let lastAttemptFailed = false;
+let schedulerStarted = false;
+let tickTimer: ReturnType<typeof setInterval> | null = null;
+let startupTimer: ReturnType<typeof setTimeout> | null = null;
+
 export function getSyncState(): SyncState {
-  return { ...state };
+  return {
+    ...state,
+    lastSyncedAt: getCatalogSyncedAt(),
+    autoEnabled: catalogSyncEnabled(),
+    intervalMs: readIntervalMs(process.env.CATALOG_SYNC_INTERVAL_MS, DEFAULT_CATALOG_SYNC_INTERVAL_MS),
+  };
 }
 
-export function startCatalogSync(): SyncState {
+export function startCatalogSync(trigger: "manual" | "schedule" = "manual"): SyncState {
   if (state.running) return getSyncState();
   state.running = true;
   state.scanned = 0;
@@ -47,12 +75,62 @@ export function startCatalogSync(): SyncState {
   state.saved = 0;
   state.error = null;
   state.finishedAt = null;
+  state.trigger = trigger;
+  lastAttemptAtMs = Date.now();
+  lastAttemptFailed = false;
   void runSync().catch((error: unknown) => {
     state.error = error instanceof Error ? error.message : "Не удалось обновить каталог";
     state.running = false;
     state.finishedAt = new Date().toISOString();
+    lastAttemptFailed = true;
+    lastAttemptAtMs = Date.now();
   });
   return getSyncState();
+}
+
+export function startCatalogScheduler(): void {
+  if (schedulerStarted || !catalogSyncEnabled()) return;
+  schedulerStarted = true;
+  const tickMs = readIntervalMs(process.env.CATALOG_SYNC_TICK_MS, DEFAULT_CATALOG_SYNC_TICK_MS);
+  const startupDelayMs = readIntervalMs(
+    process.env.CATALOG_SYNC_STARTUP_DELAY_MS,
+    DEFAULT_CATALOG_SYNC_STARTUP_DELAY_MS,
+  );
+  const tick = () => {
+    try {
+      maybeStartScheduledSync();
+    } catch {
+      // Keep the timer alive even if a single check throws.
+    }
+  };
+  startupTimer = setTimeout(() => {
+    tick();
+    tickTimer = setInterval(tick, tickMs);
+    tickTimer.unref?.();
+  }, startupDelayMs);
+  startupTimer.unref?.();
+}
+
+export function maybeStartScheduledSync(now = Date.now()): SyncState {
+  if (!catalogSyncEnabled()) return getSyncState();
+  const intervalMs = readIntervalMs(process.env.CATALOG_SYNC_INTERVAL_MS, DEFAULT_CATALOG_SYNC_INTERVAL_MS);
+  const retryAfterFailureMs = readIntervalMs(process.env.CATALOG_SYNC_RETRY_MS, DEFAULT_CATALOG_SYNC_RETRY_MS);
+  const syncedAt = getCatalogSyncedAt();
+  const lastSuccessAtMs = syncedAt ? Date.parse(syncedAt) : NaN;
+  if (
+    !shouldRunScheduledSync({
+      now,
+      intervalMs,
+      retryAfterFailureMs,
+      running: state.running,
+      lastSuccessAtMs: Number.isFinite(lastSuccessAtMs) ? lastSuccessAtMs : null,
+      lastAttemptAtMs,
+      lastAttemptFailed,
+    })
+  ) {
+    return getSyncState();
+  }
+  return startCatalogSync("schedule");
 }
 
 async function runSync(): Promise<void> {
@@ -76,6 +154,9 @@ async function runSync(): Promise<void> {
   state.saved = replaceProducts(found);
   state.running = false;
   state.finishedAt = new Date().toISOString();
+  state.lastSyncedAt = getCatalogSyncedAt();
+  lastAttemptFailed = false;
+  lastAttemptAtMs = Date.now();
 }
 
 async function productUrls(): Promise<string[]> {

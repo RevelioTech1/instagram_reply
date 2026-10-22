@@ -15,6 +15,10 @@ type SyncState = {
   saved: number;
   error: string | null;
   finishedAt: string | null;
+  lastSyncedAt: string | null;
+  trigger: "manual" | "schedule" | null;
+  autoEnabled: boolean;
+  intervalMs: number;
 };
 
 export function SettingsView() {
@@ -45,6 +49,10 @@ export function SettingsView() {
       .then((response) => response.json())
       .then((data: SettingsDTO) => apply(data))
       .catch(() => setError("Настройки не открылись."));
+    fetch("/api/catalog/sync")
+      .then((response) => response.json())
+      .then((data: SyncState) => setSync(data))
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -414,10 +422,23 @@ export function SettingsView() {
         </section>
         <section className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
           <h2 className="font-display text-3xl">Цены с сайта</h2>
-          <p className="mt-2 text-sm text-[#5c5348]">Обновление проходит по всем карточкам и занимает пару минут. Старые цены остаются, пока загрузка не закончится.</p>
+          <p className="mt-2 text-sm text-[#5c5348]">
+            Каталог сам обновляется примерно раз в час. Кнопка ниже запускает внеочередной проход. Пока идёт загрузка, старые цены остаются.
+          </p>
+          <p className="mt-2 text-sm text-[#5c5348]">
+            {sync?.autoEnabled === false
+              ? "Автообновление выключено."
+              : `Автообновление примерно раз в ${formatInterval(sync?.intervalMs ?? 3_600_000)}.`}
+            {formatSyncTime(sync?.lastSyncedAt || settings?.catalogSyncedAt)
+              ? ` Последнее успешное: ${formatSyncTime(sync?.lastSyncedAt || settings?.catalogSyncedAt)}.`
+              : " Успешного обновления с сайта ещё не было."}
+          </p>
           <Button variant="outline" className="mt-4 h-9" disabled={busy === "sync" || sync?.running} onClick={() => void refreshCatalog()}>
             {sync?.running ? `Обновляем ${sync.scanned} из ${sync.total}` : "Обновить каталог"}
           </Button>
+          {sync?.running && sync.trigger === "schedule" ? (
+            <p className="mt-2 text-sm text-[#5c5348]">Сейчас идёт плановое обновление.</p>
+          ) : null}
           {sync?.saved ? <p className="mt-2 text-sm">Сохранили {sync.saved} карточек.</p> : null}
           {sync?.error ? <p className="mt-2 text-sm text-[#9b2c2c]">{sync.error}</p> : null}
         </section>
@@ -430,6 +451,27 @@ function formatExpiry(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long", year: "numeric" }).format(date);
+}
+
+function formatSyncTime(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "numeric",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatInterval(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 90) return `${minutes} мин`;
+  const hours = Math.round(minutes / 60);
+  if (hours === 1) return "час";
+  if (hours >= 2 && hours <= 4) return `${hours} часа`;
+  return `${hours} часов`;
 }
 
 function Toggle({

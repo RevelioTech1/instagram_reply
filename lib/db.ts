@@ -566,7 +566,19 @@ export function saveCommentPlan(id: string, plan: ReturnType<typeof planComment>
 }
 
 export function updateReplies(id: string, replyPublic: string, replyPrivate: string): CommentDTO | null {
-  db().prepare("update comments set reply_public = ?, reply_private = ? where id = ?").run(replyPublic, replyPrivate, id);
+  const current = getComment(id);
+  if (!current) return null;
+  const hasText = Boolean(replyPublic.trim() || replyPrivate.trim());
+  // Manual reply on a bot-skipped reaction: move back into the waiting queue.
+  if (current.status === "skipped" && hasText) {
+    db()
+      .prepare(
+        "update comments set reply_public = ?, reply_private = ?, status = 'draft', reason = ? where id = ?",
+      )
+      .run(replyPublic, replyPrivate, "Ответ введён вручную после пропуска ботом.", id);
+  } else {
+    db().prepare("update comments set reply_public = ?, reply_private = ? where id = ?").run(replyPublic, replyPrivate, id);
+  }
   return getComment(id);
 }
 

@@ -3,6 +3,20 @@ export function formatPrice(value: number | null | undefined): string | null {
   return `${new Intl.NumberFormat("ru-RU").format(value)} ₽`;
 }
 
+/** Comment timestamps from Instagram / ingest, shown in Moscow local time. */
+export function formatCommentWhen(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Europe/Moscow",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export function formatMeasure(raw: string, unit: string): string | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;

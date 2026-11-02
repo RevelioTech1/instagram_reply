@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { CommentDTO, ProductDTO } from "@/lib/dto";
-import { formatPrice } from "@/lib/format";
+import { formatCommentWhen, formatPrice } from "@/lib/format";
 import { INTENT_LABEL, SOURCE_LABEL, STATUS_LABEL } from "@/lib/labels";
 
 const FILTERS = [
@@ -100,6 +100,9 @@ export function Inbox() {
               </div>
               <p className="mt-1 line-clamp-2 text-sm">{comment.text}</p>
               <p className="mt-2 text-xs text-muted-foreground">
+                @{comment.username} · {formatCommentWhen(comment.createdAt)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
                 {INTENT_LABEL[comment.primaryIntent]}
                 {comment.products[0] ? ` · ${comment.products[0].code}` : ""}
               </p>
@@ -175,7 +178,8 @@ function CommentDetail({
   }
 
   const local = comment.delivery === "local";
-  const canSend = comment.status !== "skipped" && (replyPublic.trim() || replyPrivate.trim());
+  const canSend = Boolean(replyPublic.trim() || replyPrivate.trim());
+  const skipped = comment.status === "skipped";
 
   return (
     <div className="space-y-4">
@@ -185,7 +189,10 @@ function CommentDetail({
           <Badge variant="outline">{STATUS_LABEL[comment.status]}</Badge>
           <span className="text-xs text-muted-foreground">{Math.round(comment.confidence * 100)}% уверенности</span>
         </div>
-        <p className="mt-4 font-display text-3xl leading-tight text-[#2a211c]">{comment.text}</p>
+        <p className="mt-3 text-sm text-[#5c5348]">
+          @{comment.username} · {formatCommentWhen(comment.createdAt)}
+        </p>
+        <p className="mt-2 font-display text-3xl leading-tight text-[#2a211c]">{comment.text}</p>
         <p className="mt-3 text-sm text-[#5c5348]">{comment.reason}</p>
         <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Подпись поста</p>
         <p className="mt-1 text-sm whitespace-pre-wrap text-[#3d342b]">
@@ -210,70 +217,72 @@ function CommentDetail({
         )}
       </div>
 
-      {comment.status !== "skipped" ? (
-        <div className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
-          <p className="text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Как это выглядит в комментарии</p>
-          <Textarea className="mt-3 min-h-32 bg-white" value={replyPublic} onChange={(event) => setReplyPublic(event.target.value)} />
-          {comment.primaryIntent === "none" ? null : (
-            <>
-              <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Личное сообщение со ссылкой</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                В комментарии ссылка часто не нажимается. В директ она приходит рабочей, одно сообщение на комментарий.
-              </p>
-              <Textarea className="mt-2 min-h-32 bg-white" value={replyPrivate} onChange={(event) => setReplyPrivate(event.target.value)} />
-            </>
-          )}
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <Button className="h-9" disabled={!canSend || busy !== ""} onClick={() => void send()}>
-              {comment.source === "demo" || comment.source === "simulator" ? "Сохранить как ответ" : "Отправить в Instagram"}
-            </Button>
+      {skipped ? (
+        <div className="rounded-3xl bg-[#24382c] p-5 text-[#f6f3ea]">
+          <p className="font-display text-2xl">Бот ответ не готовил</p>
+          <p className="mt-2 text-sm text-[#d7e3da]">
+            Реакция без вопроса — обычно пропускаем. Ниже можно всё равно написать и отправить ответ вручную.
+          </p>
+        </div>
+      ) : null}
+
+      <div className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
+        <p className="text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Как это выглядит в комментарии</p>
+        <Textarea className="mt-3 min-h-32 bg-white" value={replyPublic} onChange={(event) => setReplyPublic(event.target.value)} />
+        {comment.primaryIntent === "none" ? null : (
+          <>
+            <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Личное сообщение со ссылкой</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              В комментарии ссылка часто не нажимается. В директ она приходит рабочей, одно сообщение на комментарий.
+            </p>
+            <Textarea className="mt-2 min-h-32 bg-white" value={replyPrivate} onChange={(event) => setReplyPrivate(event.target.value)} />
+          </>
+        )}
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <Button className="h-9" disabled={!canSend || busy !== ""} onClick={() => void send()}>
+            {comment.source === "demo" || comment.source === "simulator" ? "Сохранить как ответ" : "Отправить в Instagram"}
+          </Button>
+          {skipped ? null : (
             <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void act(`/api/comments/${comment.id}/skip`)}>
               Не отвечать
             </Button>
-            <Button
-              variant="secondary"
-              className="h-9"
-              disabled={busy !== ""}
-              onClick={() => void act(`/api/comments/${comment.id}`, { replyPublic, replyPrivate })}
-            >
-              Запомнить правку
-            </Button>
-          </div>
-          {local ? (
-            <p className="mt-3 text-sm text-[#1c3b2c]">
-              Ответ сохранён локально. В Instagram он не ушёл: это учебный комментарий, живого id у него нет.
-            </p>
-          ) : null}
-          {comment.delivery === "instagram" ? (
-            <p className="mt-3 text-sm text-[#1c3b2c]">Ответ ушёл в Instagram.</p>
-          ) : null}
-          {comment.replyError ? <p className="mt-3 text-sm text-[#9b2c2c]">{comment.replyError}</p> : null}
-          <form
-            className="mt-4 flex flex-col gap-2 border-t border-[#efe6d4] pt-4 sm:flex-row"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void act(`/api/comments/${comment.id}`, { manualCode });
-            }}
+          )}
+          <Button
+            variant="secondary"
+            className="h-9"
+            disabled={busy !== ""}
+            onClick={() => void act(`/api/comments/${comment.id}`, { replyPublic, replyPrivate })}
           >
-            <input
-              value={manualCode}
-              onChange={(event) => setManualCode(event.target.value)}
-              placeholder="Другой артикул, если бот промахнулся"
-              className="h-9 flex-1 rounded-lg border border-[#e4d8c4] bg-white px-3 text-sm"
-            />
-            <Button type="submit" variant="outline" className="h-9" disabled={!manualCode.trim() || busy !== ""}>
-              Привязать
-            </Button>
-          </form>
+            Запомнить правку
+          </Button>
         </div>
-      ) : (
-        <div className="rounded-3xl bg-[#24382c] p-5 text-[#f6f3ea]">
-          <p className="font-display text-2xl">Ответ не нужен</p>
-          <p className="mt-2 text-sm text-[#d7e3da]">
-            Комплименты и реакции бот не комментирует, чтобы лента не заполнялась одинаковыми «спасибо».
+        {local ? (
+          <p className="mt-3 text-sm text-[#1c3b2c]">
+            Ответ сохранён локально. В Instagram он не ушёл: это учебный комментарий, живого id у него нет.
           </p>
-        </div>
-      )}
+        ) : null}
+        {comment.delivery === "instagram" ? (
+          <p className="mt-3 text-sm text-[#1c3b2c]">Ответ ушёл в Instagram.</p>
+        ) : null}
+        {comment.replyError ? <p className="mt-3 text-sm text-[#9b2c2c]">{comment.replyError}</p> : null}
+        <form
+          className="mt-4 flex flex-col gap-2 border-t border-[#efe6d4] pt-4 sm:flex-row"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void act(`/api/comments/${comment.id}`, { manualCode });
+          }}
+        >
+          <input
+            value={manualCode}
+            onChange={(event) => setManualCode(event.target.value)}
+            placeholder="Другой артикул, если бот промахнулся"
+            className="h-9 flex-1 rounded-lg border border-[#e4d8c4] bg-white px-3 text-sm"
+          />
+          <Button type="submit" variant="outline" className="h-9" disabled={!manualCode.trim() || busy !== ""}>
+            Привязать
+          </Button>
+        </form>
+      </div>
     </div>
   );
 }

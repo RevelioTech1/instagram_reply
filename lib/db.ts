@@ -24,6 +24,8 @@ type SqliteHandle = InstanceType<typeof SqliteHandle>;
 
 /** Bump when demo cleanup rules change. "0" = demos removed, never re-seeded. */
 const DEMO_VERSION = "0";
+/** Bump to wipe inbox once on deploy (old replies mixed into drafts). */
+const INBOX_RESET_VERSION = "1";
 
 type SqlRow = Record<string, unknown>;
 
@@ -42,6 +44,7 @@ function db(): SqliteHandle {
     migrate(database);
     importSnapshot(database);
     clearDemoContent(database);
+    clearInboxOnce(database);
     globalDb.__iordaniDb = database;
   }
   return globalDb.__iordaniDb;
@@ -157,6 +160,26 @@ function clearDemoContent(database: SqliteHandle): void {
   database.prepare("delete from comments where source = 'demo'").run();
   database.prepare("delete from posts where source = 'demo'").run();
   putSetting(database, "demo_version", DEMO_VERSION);
+}
+
+function clearInboxOnce(database: SqliteHandle): void {
+  if (setting(database, "inbox_reset_version") === INBOX_RESET_VERSION) return;
+  clearInboxTables(database);
+  putSetting(database, "inbox_reset_version", INBOX_RESET_VERSION);
+}
+
+function clearInboxTables(database: SqliteHandle): { comments: number; posts: number } {
+  const comments = database.prepare("delete from comments").run() as { changes?: number };
+  const posts = database.prepare("delete from posts").run() as { changes?: number };
+  return {
+    comments: Number(comments.changes ?? 0),
+    posts: Number(posts.changes ?? 0),
+  };
+}
+
+/** Wipe all inbox comments and related posts so a fresh poll can refill them. */
+export function clearInbox(): { comments: number; posts: number } {
+  return clearInboxTables(db());
 }
 
 let catalogCache: CatalogIndex | null = null;

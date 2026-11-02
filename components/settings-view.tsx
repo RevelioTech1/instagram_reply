@@ -192,6 +192,20 @@ export function SettingsView() {
     else setNotice(data.message || "Готово. Неотвеченные из последних 10 постов во входящих.");
   }
 
+  async function clearInbox() {
+    if (!window.confirm("Удалить все комментарии и посты во входящих? Потом можно забрать свежие с Instagram.")) {
+      return;
+    }
+    setBusy("clear");
+    setNotice("");
+    setError("");
+    const response = await fetch("/api/comments/clear", { method: "POST" });
+    const data = (await response.json()) as { message?: string };
+    setBusy("");
+    if (!response.ok) setError(data.message || "Не удалось очистить входящие.");
+    else setNotice(data.message || "Входящие очищены.");
+  }
+
   async function refreshCatalog() {
     setBusy("sync");
     const response = await fetch("/api/catalog/sync", { method: "POST" });
@@ -370,6 +384,9 @@ export function SettingsView() {
             <Button variant="secondary" className="h-9" disabled={busy !== ""} onClick={() => void poll()}>
               {busy === "poll" ? "Забираем…" : "Неотвеченные из 10 последних постов"}
             </Button>
+            <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void clearInbox()}>
+              {busy === "clear" ? "Чистим…" : "Очистить входящие"}
+            </Button>
             {settings.hasAccessToken ? (
               <Button variant="ghost" className="h-9" disabled={busy !== ""} onClick={() => void disconnect()}>
                 Выйти
@@ -378,7 +395,8 @@ export function SettingsView() {
           </div>
           <p className="text-sm text-[#5c5348]">
             Кнопка смотрит только 10 свежих постов и кладёт во входящие комментарии без публичного ответа от
-            аккаунта магазина. Полный обход ленты отключён — Instagram режет по лимитам.
+            аккаунта магазина. Полный обход ленты отключён — Instagram режет по лимитам. После деплоя старые
+            входящие очищаются один раз сами; дальше можно жать «Очистить входящие» и снова забрать свежие.
           </p>
           {notice ? <p className="text-sm text-[#1c3b2c]">{notice}</p> : null}
           {error ? <p className="text-sm break-words text-[#9b2c2c]">{error}</p> : null}

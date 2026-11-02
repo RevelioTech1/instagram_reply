@@ -1,6 +1,12 @@
-import { getSecrets, isOwnAccount, saveSecrets } from "./db.ts";
+import { getSecrets, ownAccountIds, ownAccountNames, saveSecrets } from "./db.ts";
 import { expiryFromNow, instagramErrorMessage } from "./ig-login.ts";
-import { commentAuthor, hasBusinessReply, type IgCommentNode } from "./ig-replies.ts";
+import {
+  commentAuthor,
+  hasBusinessReply,
+  isOwnAuthor,
+  isTopLevelComment,
+  type IgCommentNode,
+} from "./ig-replies.ts";
 import type { AuthMode } from "./types.ts";
 
 type GraphError = { error?: { message?: string } };
@@ -9,6 +15,7 @@ export type RemoteComment = {
   id: string;
   text: string;
   username: string;
+  userId?: string;
   timestamp?: string;
   mediaId: string;
   caption: string;
@@ -195,7 +202,7 @@ export const RECENT_MEDIA_LIMIT = 10;
 const MAX_COMMENT_PAGES_PER_MEDIA = 3;
 
 const COMMENT_FIELDS =
-  "id,text,username,timestamp,from{id,username},replies.limit(50){id,text,username,from{id,username}}";
+  "id,text,username,timestamp,parent_id,from{id,username},replies.limit(50){id,text,username,from{id,username}}";
 
 type MediaPageItem = {
   id: string;
@@ -216,9 +223,7 @@ type Paged<T> = {
 
 function ownIdentity() {
   const secrets = getSecrets();
-  const names = ["iordani925", secrets.igUsername].filter(Boolean);
-  const ids = [secrets.igUserId].filter(Boolean);
-  return { names, ids, secrets };
+  return { names: ownAccountNames(), ids: ownAccountIds(), secrets };
 }
 
 export async function fetchRecentComments(): Promise<RemoteComment[]> {
@@ -271,12 +276,15 @@ export async function collectCommentsFromMedia(options: {
     });
     for (const comment of nodes) {
       if (!comment.text) continue;
+      // /comments is top-level only; still skip nested replies if parent_id appears.
+      if (!isTopLevelComment(comment)) continue;
       const author = commentAuthor(comment);
-      if (isOwnAccount(author.username || "instagram")) continue;
+      if (isOwnAuthor(author, names, ids)) continue;
       const remote: RemoteComment = {
         id: comment.id,
         text: comment.text,
         username: author.username || "instagram",
+        userId: author.id || undefined,
         timestamp: comment.timestamp,
         mediaId: media.id,
         caption: media.caption ?? "",

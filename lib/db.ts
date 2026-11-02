@@ -681,8 +681,20 @@ export function listCategories(): Array<{ slug: string; name: string; count: num
   return rows.map((row) => ({ slug: String(row.slug), name: String(row.name), count: Number(row.count) }));
 }
 
-export function isOwnAccount(username: string): boolean {
+export function ownAccountNames(): string[] {
   const secrets = getSecrets();
+  return ["iordani925", secrets.igUsername].map((name) => name.replace(/^@/, "")).filter(Boolean);
+}
+
+export function ownAccountIds(): string[] {
+  const id = getSecrets().igUserId;
+  return id ? [String(id)] : [];
+}
+
+export function isOwnAccount(username: string, userId?: string | null): boolean {
   const name = username.replace(/^@/, "").toLowerCase();
-  return name === "iordani925" || name === secrets.igUsername.replace(/^@/, "").toLowerCase();
+  const names = new Set(ownAccountNames().map((item) => item.toLowerCase()));
+  if (name && names.has(name)) return true;
+  if (userId && ownAccountIds().includes(String(userId))) return true;
+  return false;
 }

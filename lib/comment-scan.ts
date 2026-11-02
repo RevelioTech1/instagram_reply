@@ -69,6 +69,7 @@ async function runRecentCommentScan(): Promise<void> {
       id: comment.id,
       mediaId: comment.mediaId,
       username: comment.username,
+      userId: comment.userId,
       text: comment.text,
       createdAt: comment.timestamp,
       source: "poll",

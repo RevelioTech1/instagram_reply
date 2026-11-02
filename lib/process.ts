@@ -18,6 +18,7 @@ export type IncomingComment = {
   id: string;
   mediaId: string;
   username: string;
+  userId?: string | null;
   text: string;
   createdAt?: string;
   source: "webhook" | "poll" | "simulator" | "demo";
@@ -28,7 +29,7 @@ export type IncomingComment = {
 
 export async function ingestComment(input: IncomingComment): Promise<CommentDTO | null> {
   const username = input.username.replace(/^@/, "") || "instagram";
-  if (isOwnAccount(username)) return null;
+  if (isOwnAccount(username, input.userId)) return null;
   const existing = getComment(input.id);
   if (existing) return existing;
 

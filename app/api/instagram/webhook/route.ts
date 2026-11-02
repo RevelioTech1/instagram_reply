@@ -1,4 +1,5 @@
-import { getSecrets } from "@/lib/db";
+import { getSecrets, isOwnAccount } from "@/lib/db";
+import { isTopLevelComment } from "@/lib/ig-replies";
 import { ingestComment } from "@/lib/process";
 import { webhookPostAllowed } from "@/lib/webhook-signature";
 
@@ -24,6 +25,7 @@ type WebhookPayload = {
       value?: {
         id?: string;
         text?: string;
+        parent_id?: string;
         from?: { id?: string; username?: string };
         media?: { id?: string };
       };
@@ -49,10 +51,15 @@ export async function POST(request: Request) {
       if (change.field !== "comments") continue;
       const value = change.value;
       if (!value?.id || !value.text || !value.media?.id) continue;
+      // Replies to comments arrive with parent_id — inbox only needs top-level questions.
+      if (!isTopLevelComment(value)) continue;
+      const username = value.from?.username || value.from?.id || "instagram";
+      if (isOwnAccount(username, value.from?.id)) continue;
       await ingestComment({
         id: value.id,
         mediaId: value.media.id,
-        username: value.from?.username || value.from?.id || "instagram",
+        username,
+        userId: value.from?.id,
         text: value.text,
         source: "webhook",
       });

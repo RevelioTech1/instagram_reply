@@ -60,9 +60,11 @@ export function Inbox() {
   );
 
   return (
-    <div className="grid min-w-0 gap-6 lg:grid-cols-[340px_minmax(0,1fr)]">
-      <section className={`min-w-0 space-y-4 ${selected ? "hidden lg:block" : "block"}`}>
-        <div className="flex min-w-0 gap-1 overflow-x-auto">
+    <div className="grid min-w-0 gap-6 lg:h-[calc(100dvh-8.5rem)] lg:grid-cols-[340px_minmax(0,1fr)] lg:items-stretch">
+      <section
+        className={`flex min-h-0 min-w-0 flex-col gap-4 ${selected ? "hidden lg:flex" : "flex"}`}
+      >
+        <div className="flex min-w-0 shrink-0 gap-1 overflow-x-auto">
           {FILTERS.map((item) => (
             <button
               key={item.id}
@@ -76,7 +78,7 @@ export function Inbox() {
             </button>
           ))}
         </div>
-        <div className="max-h-[70vh] space-y-2 overflow-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 lg:pb-2">
           {comments === null ? <p className="text-sm text-muted-foreground">Открываем входящие…</p> : null}
           {comments?.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-[#e4d8c4] p-4 text-sm text-muted-foreground">
@@ -105,7 +107,7 @@ export function Inbox() {
           ))}
         </div>
       </section>
-      <section className={`min-w-0 ${selected ? "block" : "hidden lg:block"}`}>
+      <section className={`min-h-0 min-w-0 overflow-auto ${selected ? "block" : "hidden lg:block"}`}>
         {selected ? (
           <button type="button" className="mb-3 text-sm text-[#6d2e32] lg:hidden" onClick={() => setSelectedId(null)}>
             ← К списку

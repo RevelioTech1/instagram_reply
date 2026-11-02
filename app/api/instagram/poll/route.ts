@@ -1,5 +1,5 @@
 import { deleteComment, deleteOrphanPosts, getComment } from "@/lib/db";
-import { collectCommentsFromMedia } from "@/lib/instagram";
+import { collectCommentsFromMedia, RECENT_MEDIA_LIMIT } from "@/lib/instagram";
 import { ingestComment } from "@/lib/process";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,7 @@ export const runtime = "nodejs";
 export async function POST() {
   try {
     const { unreplied, answered } = await collectCommentsFromMedia({
-      mediaLimit: 8,
-      commentsPerMedia: 25,
+      mediaLimit: RECENT_MEDIA_LIMIT,
     });
     let removed = 0;
     for (const comment of answered) {
@@ -41,7 +40,8 @@ export async function POST() {
       unreplied: unreplied.length,
       ingested,
       removed,
-      message: `Неотвеченных: ${unreplied.length} (новых ${ingested}). Убрали уже отвеченных вне панели: ${removed}.`,
+      mediaLimit: RECENT_MEDIA_LIMIT,
+      message: `Из ${RECENT_MEDIA_LIMIT} последних постов: неотвеченных ${unreplied.length} (новых ${ingested}). Убрали уже отвеченных вне панели: ${removed}.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось забрать комментарии.";

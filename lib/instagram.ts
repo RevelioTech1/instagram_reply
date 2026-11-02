@@ -189,6 +189,11 @@ export async function fetchMedia(mediaId: string): Promise<{
   };
 }
 
+/** Only the newest posts — a full feed walk trips Instagram rate limits. */
+export const RECENT_MEDIA_LIMIT = 10;
+/** Extra comment pages per post beyond the first embedded page (50 each). */
+const MAX_COMMENT_PAGES_PER_MEDIA = 3;
+
 const COMMENT_FIELDS =
   "id,text,username,timestamp,from{id,username},replies.limit(50){id,text,username,from{id,username}}";
 
@@ -217,21 +222,21 @@ function ownIdentity() {
 }
 
 export async function fetchRecentComments(): Promise<RemoteComment[]> {
-  const { unreplied } = await collectCommentsFromMedia({ mediaLimit: 8, commentsPerMedia: 25 });
+  const { unreplied } = await collectCommentsFromMedia({ mediaLimit: RECENT_MEDIA_LIMIT });
   return unreplied;
 }
 
 export type ScanCommentHit = RemoteComment & { answeredOutside: boolean };
 
 /**
- * Walk Instagram media (optionally all pages) and split comments into unreplied vs
- * already answered publicly by the shop account.
+ * Read the newest Instagram posts (default 10) and split comments into unreplied vs
+ * already answered publicly by the shop account. Never walks the full feed.
  */
 export async function collectCommentsFromMedia(options: {
-  mediaLimit?: number | null;
+  mediaLimit?: number;
   commentsPerMedia?: number;
   onMedia?: (info: { scanned: number; mediaId: string }) => void;
-}): Promise<{ unreplied: RemoteComment[]; answered: RemoteComment[] }> {
+} = {}): Promise<{ unreplied: RemoteComment[]; answered: RemoteComment[] }> {
   await refreshInstagramTokenIfNeeded();
   const { names, ids, secrets } = ownIdentity();
   if (!secrets.accessToken || !secrets.igUserId) {
@@ -242,55 +247,45 @@ export async function collectCommentsFromMedia(options: {
   const unreplied: RemoteComment[] = [];
   const answered: RemoteComment[] = [];
   const commentsPerMedia = options.commentsPerMedia ?? 50;
-  let after: string | undefined;
+  const maxMedia = Math.max(1, Math.min(options.mediaLimit ?? RECENT_MEDIA_LIMIT, RECENT_MEDIA_LIMIT));
   let scanned = 0;
-  let fetchedMedia = 0;
-  const maxMedia = options.mediaLimit ?? null;
 
-  while (maxMedia === null || fetchedMedia < maxMedia) {
-    const pageSize = maxMedia === null ? 25 : Math.min(25, maxMedia - fetchedMedia);
-    const page = await graph<Paged<MediaPageItem>>(`${secrets.igUserId}/media`, {
+  const page = await graph<Paged<MediaPageItem>>(`${secrets.igUserId}/media`, {
+    token,
+    version,
+    authMode: secrets.authMode,
+    query: {
+      fields: `id,caption,permalink,media_url,thumbnail_url,timestamp,comments.limit(${commentsPerMedia}){${COMMENT_FIELDS}}`,
+      limit: String(maxMedia),
+    },
+  });
+
+  for (const media of page.data ?? []) {
+    scanned += 1;
+    options.onMedia?.({ scanned, mediaId: media.id });
+    const nodes = await listMediaComments(media, {
       token,
       version,
       authMode: secrets.authMode,
-      query: {
-        fields: `id,caption,permalink,media_url,thumbnail_url,timestamp,comments.limit(${commentsPerMedia}){${COMMENT_FIELDS}}`,
-        limit: String(pageSize),
-        ...(after ? { after } : {}),
-      },
+      pageSize: commentsPerMedia,
     });
-    const items = page.data ?? [];
-    if (!items.length) break;
-    for (const media of items) {
-      scanned += 1;
-      fetchedMedia += 1;
-      options.onMedia?.({ scanned, mediaId: media.id });
-      const nodes = await listMediaComments(media, {
-        token,
-        version,
-        authMode: secrets.authMode,
-        pageSize: commentsPerMedia,
-      });
-      for (const comment of nodes) {
-        if (!comment.text) continue;
-        const author = commentAuthor(comment);
-        if (isOwnAccount(author.username || "instagram")) continue;
-        const remote: RemoteComment = {
-          id: comment.id,
-          text: comment.text,
-          username: author.username || "instagram",
-          timestamp: comment.timestamp,
-          mediaId: media.id,
-          caption: media.caption ?? "",
-          permalink: media.permalink ?? null,
-          mediaUrl: media.media_url ?? media.thumbnail_url ?? null,
-        };
-        if (hasBusinessReply(comment, names, ids)) answered.push(remote);
-        else unreplied.push(remote);
-      }
+    for (const comment of nodes) {
+      if (!comment.text) continue;
+      const author = commentAuthor(comment);
+      if (isOwnAccount(author.username || "instagram")) continue;
+      const remote: RemoteComment = {
+        id: comment.id,
+        text: comment.text,
+        username: author.username || "instagram",
+        timestamp: comment.timestamp,
+        mediaId: media.id,
+        caption: media.caption ?? "",
+        permalink: media.permalink ?? null,
+        mediaUrl: media.media_url ?? media.thumbnail_url ?? null,
+      };
+      if (hasBusinessReply(comment, names, ids)) answered.push(remote);
+      else unreplied.push(remote);
     }
-    after = page.paging?.cursors?.after;
-    if (!after || items.length < pageSize) break;
   }
 
   return { unreplied, answered };
@@ -302,7 +297,9 @@ async function listMediaComments(
 ): Promise<IgCommentNode[]> {
   const collected: IgCommentNode[] = [...(media.comments?.data ?? [])];
   let after = media.comments?.paging?.cursors?.after;
-  while (after) {
+  let pages = 0;
+  while (after && pages < MAX_COMMENT_PAGES_PER_MEDIA) {
+    pages += 1;
     const page = await graph<Paged<IgCommentNode>>(`${media.id}/comments`, {
       token: options.token,
       version: options.version,
@@ -317,35 +314,9 @@ async function listMediaComments(
     after = page.paging?.cursors?.after;
     if (!(page.data?.length ?? 0)) break;
   }
-  for (const comment of collected) {
-    await expandReplies(comment, options);
-  }
+  // Do not page /replies — that multiplies API calls and trips rate limits.
+  // Brand replies usually appear in the first embedded replies.limit(50) page.
   return collected;
-}
-
-async function expandReplies(
-  comment: IgCommentNode,
-  options: { token: string; version: string; authMode: AuthMode; pageSize: number },
-): Promise<void> {
-  if (!comment.replies) comment.replies = { data: [] };
-  const data = comment.replies.data ?? [];
-  comment.replies.data = data;
-  let after = comment.replies.paging?.cursors?.after;
-  while (after) {
-    const page = await graph<Paged<IgCommentNode>>(`${comment.id}/replies`, {
-      token: options.token,
-      version: options.version,
-      authMode: options.authMode,
-      query: {
-        fields: "id,text,username,from{id,username}",
-        limit: String(options.pageSize),
-        after,
-      },
-    });
-    data.push(...(page.data ?? []));
-    after = page.paging?.cursors?.after;
-    if (!(page.data?.length ?? 0)) break;
-  }
 }
 
 export async function publishPublicReply(commentId: string, message: string): Promise<string | null> {

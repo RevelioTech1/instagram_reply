@@ -1,5 +1,5 @@
 import { deleteComment, deleteOrphanPosts, getComment } from "./db.ts";
-import { collectCommentsFromMedia } from "./instagram.ts";
+import { collectCommentsFromMedia, RECENT_MEDIA_LIMIT } from "./instagram.ts";
 import { ingestComment } from "./process.ts";
 
 export type CommentScanState = {
@@ -28,7 +28,7 @@ export function getCommentScanState(): CommentScanState {
   return { ...state };
 }
 
-/** One-shot walk of all media: drop locally stored comments already answered on IG, ingest the rest. */
+/** Scan only the newest posts for unreplied comments (same limit as poll). */
 export function startFullCommentScan(): CommentScanState {
   if (state.running) return getCommentScanState();
   state.running = true;
@@ -39,7 +39,7 @@ export function startFullCommentScan(): CommentScanState {
   state.orphansRemoved = 0;
   state.error = null;
   state.finishedAt = null;
-  void runFullCommentScan().catch((error: unknown) => {
+  void runRecentCommentScan().catch((error: unknown) => {
     state.error = error instanceof Error ? error.message : "Не удалось просканировать комментарии";
     state.running = false;
     state.finishedAt = new Date().toISOString();
@@ -47,10 +47,9 @@ export function startFullCommentScan(): CommentScanState {
   return getCommentScanState();
 }
 
-async function runFullCommentScan(): Promise<void> {
+async function runRecentCommentScan(): Promise<void> {
   const { unreplied, answered } = await collectCommentsFromMedia({
-    mediaLimit: null,
-    commentsPerMedia: 50,
+    mediaLimit: RECENT_MEDIA_LIMIT,
     onMedia: ({ scanned }) => {
       state.mediaScanned = scanned;
     },
@@ -59,7 +58,6 @@ async function runFullCommentScan(): Promise<void> {
   for (const comment of answered) {
     const existing = getComment(comment.id);
     if (!existing) continue;
-    // Keep history that this panel already sent; drop everything answered outside.
     if (existing.delivery === "instagram" || existing.delivery === "local") continue;
     if (deleteComment(comment.id)) state.removedAnswered += 1;
   }

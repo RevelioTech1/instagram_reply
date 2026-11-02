@@ -1,35 +1,61 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ProductDTO } from "@/lib/dto";
 import { formatPrice } from "@/lib/format";
 
 type Category = { slug: string; name: string; count: number };
 
+const PAGE_SIZE = 24;
+
 export function CatalogView() {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
+  const [page, setPage] = useState(1);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<ProductDTO[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [pageCount, setPageCount] = useState(1);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setPage(1);
+  }, [query, category]);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
       const params = new URLSearchParams();
       if (query.trim()) params.set("q", query.trim());
       if (category) params.set("category", category);
+      params.set("page", String(page));
+      params.set("limit", String(PAGE_SIZE));
       fetch(`/api/catalog?${params.toString()}`)
         .then((response) => response.json())
-        .then((data: { products: ProductDTO[]; categories: Category[] }) => {
-          setProducts(data.products);
-          setCategories(data.categories);
-          setError("");
-        })
+        .then(
+          (data: {
+            products: ProductDTO[];
+            categories: Category[];
+            total: number;
+            pageCount: number;
+            page: number;
+          }) => {
+            setProducts(data.products);
+            setCategories(data.categories);
+            setTotal(data.total);
+            setPageCount(Math.max(1, data.pageCount || 1));
+            if (data.page && data.page !== page) setPage(data.page);
+            setError("");
+          },
+        )
         .catch(() => setError("Каталог не открылся."));
     }, 200);
     return () => window.clearTimeout(handle);
-  }, [query, category]);
+  }, [query, category, page]);
+
+  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const to = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div>
@@ -46,10 +72,20 @@ export function CatalogView() {
           placeholder="Артикул или название: Б-КО-338, Матрона, хризма"
           className="h-10 bg-white md:max-w-md"
         />
-        <p className="text-sm text-muted-foreground">{products ? `${products.length} на экране` : "Загрузка…"}</p>
+        <p className="text-sm text-muted-foreground">
+          {products === null
+            ? "Загрузка…"
+            : total === 0
+              ? "0 товаров"
+              : `Показаны ${from}–${to} из ${total}`}
+        </p>
       </div>
       <div className="mt-4 flex min-w-0 gap-2 overflow-x-auto pb-1">
-        <FilterChip active={!category} onClick={() => setCategory("")} label="Все разделы" />
+        <FilterChip
+          active={!category}
+          onClick={() => setCategory("")}
+          label="Все разделы"
+        />
         {categories.map((item) => (
           <FilterChip
             key={item.slug}
@@ -84,10 +120,87 @@ export function CatalogView() {
         ))}
       </div>
       {products?.length === 0 ? (
-        <p className="mt-6 text-sm text-muted-foreground">Ничего не нашлось. Проверьте артикул: буквы могут быть и русскими, и латинскими.</p>
+        <p className="mt-6 text-sm text-muted-foreground">
+          Ничего не нашлось. Проверьте артикул: буквы могут быть и русскими, и латинскими.
+        </p>
+      ) : null}
+      {products && total > PAGE_SIZE ? (
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          onChange={(next) => {
+            setPage(next);
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+        />
       ) : null}
     </div>
   );
+}
+
+function Pagination({
+  page,
+  pageCount,
+  onChange,
+}: {
+  page: number;
+  pageCount: number;
+  onChange: (page: number) => void;
+}) {
+  const pages = visiblePages(page, pageCount);
+  return (
+    <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        className="h-9 bg-white"
+        disabled={page <= 1}
+        onClick={() => onChange(page - 1)}
+      >
+        Назад
+      </Button>
+      {pages.map((item, index) =>
+        item === "…" ? (
+          <span key={`gap-${index}`} className="px-1 text-sm text-muted-foreground">
+            …
+          </span>
+        ) : (
+          <Button
+            key={item}
+            type="button"
+            variant={item === page ? "default" : "outline"}
+            className={`h-9 min-w-9 ${item === page ? "bg-[#6d2e32] text-[#fbf7f0] hover:bg-[#6d2e32]/90" : "bg-white"}`}
+            onClick={() => onChange(item)}
+          >
+            {item}
+          </Button>
+        ),
+      )}
+      <Button
+        type="button"
+        variant="outline"
+        className="h-9 bg-white"
+        disabled={page >= pageCount}
+        onClick={() => onChange(page + 1)}
+      >
+        Вперёд
+      </Button>
+    </div>
+  );
+}
+
+function visiblePages(page: number, pageCount: number): Array<number | "…"> {
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, index) => index + 1);
+  }
+  const items: Array<number | "…"> = [1];
+  const start = Math.max(2, page - 1);
+  const end = Math.min(pageCount - 1, page + 1);
+  if (start > 2) items.push("…");
+  for (let value = start; value <= end; value += 1) items.push(value);
+  if (end < pageCount - 1) items.push("…");
+  items.push(pageCount);
+  return items;
 }
 
 function FilterChip({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {

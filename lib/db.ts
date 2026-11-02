@@ -633,7 +633,12 @@ export function replaceProducts(items: RawProduct[]): number {
   return merged.length;
 }
 
-export function searchProducts(query: string, category: string | null, limit = 48): ProductDTO[] {
+export function searchProducts(
+  query: string,
+  category: string | null,
+  limit = 48,
+  offset = 0,
+): { products: ProductDTO[]; total: number } {
   const index = getCatalogIndex();
   const needle = normalize(query);
   const key = codeKey(query);
@@ -641,26 +646,30 @@ export function searchProducts(query: string, category: string | null, limit = 4
   const words = tokens(query);
   let items = index.products;
   if (category) items = items.filter((product) => product.categorySlug === category);
-  if (!needle) {
-    return items
-      .slice()
-      .sort((a, b) => a.category.localeCompare(b.category, "ru") || a.title.localeCompare(b.title, "ru"))
-      .slice(0, limit)
-      .map(toProductDTO);
-  }
-  return items
-    .map((product) => {
-      let score = 0;
-      if (product.codeKey === key || product.translitKey === translit) score += 120;
-      else if (key.length >= 3 && (product.codeKey.includes(key) || product.translitKey.includes(translit))) score += 50;
-      if (needle.length > 2 && product.searchText.includes(needle)) score += 25;
-      if (words.length > 0 && words.every((word) => product.searchText.includes(word))) score += 15;
-      return { product, score };
-    })
-    .filter((item) => item.score > 0)
-    .sort((a, b) => b.score - a.score || a.product.title.localeCompare(b.product.title, "ru"))
-    .slice(0, limit)
-    .map((item) => toProductDTO(item.product));
+  const ranked = !needle
+    ? items
+        .slice()
+        .sort((a, b) => a.category.localeCompare(b.category, "ru") || a.title.localeCompare(b.title, "ru"))
+    : items
+        .map((product) => {
+          let score = 0;
+          if (product.codeKey === key || product.translitKey === translit) score += 120;
+          else if (key.length >= 3 && (product.codeKey.includes(key) || product.translitKey.includes(translit))) {
+            score += 50;
+          }
+          if (needle.length > 2 && product.searchText.includes(needle)) score += 25;
+          if (words.length > 0 && words.every((word) => product.searchText.includes(word))) score += 15;
+          return { product, score };
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score || a.product.title.localeCompare(b.product.title, "ru"))
+        .map((item) => item.product);
+  const start = Math.max(0, offset);
+  const pageSize = Math.max(1, limit);
+  return {
+    total: ranked.length,
+    products: ranked.slice(start, start + pageSize).map(toProductDTO),
+  };
 }
 
 export function listCategories(): Array<{ slug: string; name: string; count: number }> {

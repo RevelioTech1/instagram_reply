@@ -1,12 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import type { SettingsDTO } from "@/lib/dto";
 import { parsePriceSymbols } from "@/lib/intent";
+
+function rulesSnapshot(
+  settings: SettingsDTO,
+  symbolDraft: string | null,
+  praiseDraft: string | null,
+): string {
+  return JSON.stringify({
+    autoReply: settings.autoReply,
+    publicReply: settings.publicReply,
+    privateReply: settings.privateReply,
+    includePrice: settings.includePrice,
+    minConfidence: settings.minConfidence,
+    phone: settings.phone,
+    reactToPraise: settings.reactToPraise,
+    priceSymbols: parsePriceSymbols(symbolDraft ?? (settings.priceSymbols ?? []).join("\n")),
+    praiseReplies: (praiseDraft ?? (settings.praiseReplies ?? []).join("\n"))
+      .split("\n")
+      .map((item) => item.trim())
+      .filter(Boolean),
+  });
+}
 
 type SyncState = {
   running: boolean;
@@ -32,9 +53,16 @@ export function SettingsView() {
   const [busy, setBusy] = useState("");
   const [symbolDraft, setSymbolDraft] = useState<string | null>(null);
   const [praiseDraft, setPraiseDraft] = useState<string | null>(null);
+  const [cleanRules, setCleanRules] = useState<string | null>(null);
 
   function apply(next: SettingsDTO) {
     setSettings(next);
+  }
+
+  function markRulesClean(next: SettingsDTO) {
+    setSymbolDraft(null);
+    setPraiseDraft(null);
+    setCleanRules(rulesSnapshot(next, null, null));
   }
 
   useEffect(() => {
@@ -47,7 +75,10 @@ export function SettingsView() {
     if (connected || problem) window.history.replaceState(null, "", window.location.pathname);
     fetch("/api/settings")
       .then((response) => response.json())
-      .then((data: SettingsDTO) => apply(data))
+      .then((data: SettingsDTO) => {
+        apply(data);
+        markRulesClean(data);
+      })
       .catch(() => setError("Настройки не открылись."));
     fetch("/api/catalog/sync")
       .then((response) => response.json())
@@ -148,10 +179,9 @@ export function SettingsView() {
     setBusy("rules");
     setNotice("");
     setError("");
-    await postSettings();
+    const next = await postSettings();
     setBusy("");
-    setSymbolDraft(null);
-    setPraiseDraft(null);
+    if (next) markRulesClean(next);
     setNotice("Правила сохранены.");
   }
 
@@ -213,6 +243,11 @@ export function SettingsView() {
     setBusy("");
   }
 
+  const rulesDirty = useMemo(() => {
+    if (!settings || cleanRules == null) return false;
+    return rulesSnapshot(settings, symbolDraft, praiseDraft) !== cleanRules;
+  }, [settings, symbolDraft, praiseDraft, cleanRules]);
+
   if (!settings) {
     return <p className="text-sm text-muted-foreground">{error || "Открываем настройки…"}</p>;
   }
@@ -223,12 +258,26 @@ export function SettingsView() {
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="space-y-6">
-        <div>
-          <h1 className="font-display text-5xl text-[#2a211c]">Подключение @iordani925</h1>
-          <p className="mt-2 max-w-2xl text-sm text-[#5c5348]">
-            Пока автоответ выключен, бот только готовит текст. В Instagram ничего не уходит, пока вы не нажмёте
-            «Отправить» или не включите автоответ.
-          </p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="font-display text-5xl text-[#2a211c]">Подключение @iordani925</h1>
+            <p className="mt-2 max-w-2xl text-sm text-[#5c5348]">
+              Пока автоответ выключен, бот только готовит текст. В Instagram ничего не уходит, пока вы не нажмёте
+              «Отправить» или не включите автоответ.
+            </p>
+          </div>
+          <Button
+            variant={rulesDirty ? "default" : "outline"}
+            className={
+              rulesDirty
+                ? "h-9 shrink-0 bg-[#6d2e32] text-[#fbf7f0] hover:bg-[#582428]"
+                : "h-9 shrink-0"
+            }
+            disabled={busy !== "" || !rulesDirty}
+            onClick={() => void saveRules()}
+          >
+            {busy === "rules" ? "Сохраняем…" : "Сохранить правила"}
+          </Button>
         </div>
         <section className="space-y-4 rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
           <Toggle
@@ -299,9 +348,6 @@ export function SettingsView() {
             Телефон в ответах про доставку
             <Input className="mt-1 h-9 bg-white" value={settings.phone} onChange={(event) => setSettings({ ...settings, phone: event.target.value })} />
           </label>
-          <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void saveRules()}>
-            Сохранить правила
-          </Button>
         </section>
         <section className="space-y-4 rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
           <h2 className="font-display text-3xl">Вход через Instagram</h2>

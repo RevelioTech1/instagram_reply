@@ -199,8 +199,10 @@ export async function fetchMedia(mediaId: string): Promise<{
   };
 }
 
-/** Only the newest posts — a full feed walk trips Instagram rate limits. */
-export const RECENT_MEDIA_LIMIT = 20;
+/** Newest posts to scan for inbox sync — raised to catch older viral posts with fresh comments. */
+export const RECENT_MEDIA_LIMIT = 50;
+/** Graph often returns ≤25 media per page; we page until RECENT_MEDIA_LIMIT. */
+const MEDIA_PAGE_SIZE = 25;
 /** Extra comment pages per post beyond the first embedded page (50 each). */
 const MAX_COMMENT_PAGES_PER_MEDIA = 3;
 
@@ -237,8 +239,8 @@ export async function fetchRecentComments(): Promise<RemoteComment[]> {
 export type ScanCommentHit = RemoteComment & { answeredOutside: boolean };
 
 /**
- * Read the newest Instagram posts (default 10) and split comments into unreplied vs
- * already answered publicly by the shop account (iordani925 / connected IG user).
+ * Read the newest Instagram posts and split comments into unreplied vs already
+ * answered publicly by the shop account (iordani925 / connected IG user).
  * Replies from other people do not count as answered — those stay unreplied.
  * Never walks the full feed.
  */
@@ -246,7 +248,7 @@ export async function collectCommentsFromMedia(options: {
   mediaLimit?: number;
   commentsPerMedia?: number;
   onMedia?: (info: { scanned: number; mediaId: string }) => void;
-} = {}): Promise<{ unreplied: RemoteComment[]; answered: RemoteComment[] }> {
+} = {}): Promise<{ unreplied: RemoteComment[]; answered: RemoteComment[]; mediaScanned: number }> {
   await refreshInstagramTokenIfNeeded();
   const { names, ids, secrets } = ownIdentity();
   if (!secrets.accessToken || !secrets.igUserId) {
@@ -260,17 +262,16 @@ export async function collectCommentsFromMedia(options: {
   const maxMedia = Math.max(1, Math.min(options.mediaLimit ?? RECENT_MEDIA_LIMIT, RECENT_MEDIA_LIMIT));
   let scanned = 0;
 
-  const page = await graph<Paged<MediaPageItem>>(`${secrets.igUserId}/media`, {
+  const mediaItems = await listRecentMedia({
+    igUserId: secrets.igUserId,
     token,
     version,
     authMode: secrets.authMode,
-    query: {
-      fields: `id,caption,permalink,media_url,thumbnail_url,timestamp,comments.limit(${commentsPerMedia}){${COMMENT_FIELDS}}`,
-      limit: String(maxMedia),
-    },
+    maxMedia,
+    commentsPerMedia,
   });
 
-  for (const media of page.data ?? []) {
+  for (const media of mediaItems) {
     scanned += 1;
     options.onMedia?.({ scanned, mediaId: media.id });
     const nodes = await listMediaComments(media, {
@@ -280,7 +281,8 @@ export async function collectCommentsFromMedia(options: {
       pageSize: commentsPerMedia,
     });
     for (const comment of nodes) {
-      if (!comment.text) continue;
+      // Keep "+", "＋", etc. — only skip truly empty bodies.
+      if (comment.text == null || !String(comment.text).trim()) continue;
       // /comments is top-level only; still skip nested replies if parent_id appears.
       if (!isTopLevelComment(comment)) continue;
       const author = commentAuthor(comment);
@@ -304,7 +306,38 @@ export async function collectCommentsFromMedia(options: {
     }
   }
 
-  return { unreplied, answered };
+  return { unreplied, answered, mediaScanned: scanned };
+}
+
+async function listRecentMedia(options: {
+  igUserId: string;
+  token: string;
+  version: string;
+  authMode: AuthMode;
+  maxMedia: number;
+  commentsPerMedia: number;
+}): Promise<MediaPageItem[]> {
+  const collected: MediaPageItem[] = [];
+  let after: string | undefined;
+  while (collected.length < options.maxMedia) {
+    const pageSize = Math.min(MEDIA_PAGE_SIZE, options.maxMedia - collected.length);
+    const query: Record<string, string> = {
+      fields: `id,caption,permalink,media_url,thumbnail_url,timestamp,comments.limit(${options.commentsPerMedia}){${COMMENT_FIELDS}}`,
+      limit: String(pageSize),
+    };
+    if (after) query.after = after;
+    const page = await graph<Paged<MediaPageItem>>(`${options.igUserId}/media`, {
+      token: options.token,
+      version: options.version,
+      authMode: options.authMode,
+      query,
+    });
+    const batch = page.data ?? [];
+    collected.push(...batch);
+    after = page.paging?.cursors?.after;
+    if (!batch.length || !after) break;
+  }
+  return collected.slice(0, options.maxMedia);
 }
 
 async function listMediaComments(

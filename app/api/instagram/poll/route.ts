@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 export async function POST() {
   try {
-    const { unreplied, answered } = await collectCommentsFromMedia({
+    const { unreplied, answered, mediaScanned } = await collectCommentsFromMedia({
       mediaLimit: RECENT_MEDIA_LIMIT,
     });
     let marked = 0;
@@ -52,8 +52,9 @@ export async function POST() {
       unreplied: unreplied.length,
       ingested,
       marked,
+      mediaScanned,
       mediaLimit: RECENT_MEDIA_LIMIT,
-      message: `Из ${RECENT_MEDIA_LIMIT} последних постов: неотвеченных ${unreplied.length} (новых ${ingested}). С ответом магазина пометили «Ответили»: ${marked}.`,
+      message: `Просмотрели ${mediaScanned} из ${RECENT_MEDIA_LIMIT} постов: неотвеченных ${unreplied.length} (новых ${ingested}). С ответом магазина пометили «Ответили»: ${marked}.`,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Не удалось забрать комментарии.";

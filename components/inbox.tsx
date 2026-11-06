@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { CommentDTO, ProductDTO } from "@/lib/dto";
 import { formatCommentWhen, formatPrice } from "@/lib/format";
@@ -17,8 +18,13 @@ const FILTERS = [
   { id: "failed", label: "Ошибки" },
 ];
 
+function normalizeLogin(value: string): string {
+  return value.trim().replace(/^@+/, "").toLowerCase();
+}
+
 export function Inbox() {
   const [filter, setFilter] = useState("");
+  const [loginQuery, setLoginQuery] = useState("");
   const [comments, setComments] = useState<CommentDTO[] | null>(null);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -54,17 +60,30 @@ export function Inbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
+  const visibleComments = useMemo(() => {
+    if (!comments) return null;
+    const needle = normalizeLogin(loginQuery);
+    if (!needle) return comments;
+    return comments.filter((comment) => normalizeLogin(comment.username).includes(needle));
+  }, [comments, loginQuery]);
+
   const selected = useMemo(
     () => comments?.find((comment) => comment.id === selectedId) ?? null,
     [comments, selectedId],
   );
 
+  useEffect(() => {
+    if (!visibleComments) return;
+    if (selectedId && visibleComments.some((comment) => comment.id === selectedId)) return;
+    setSelectedId(visibleComments[0]?.id ?? null);
+  }, [visibleComments, selectedId]);
+
   return (
     <div className="grid min-w-0 gap-6 lg:h-[calc(100dvh-8.5rem)] lg:grid-cols-[340px_minmax(0,1fr)] lg:items-stretch">
       <section
-        className={`flex min-h-0 min-w-0 flex-col gap-4 ${selected ? "hidden lg:flex" : "flex"}`}
+        className={`flex min-h-0 min-w-0 flex-col gap-3 ${selected ? "hidden lg:flex" : "flex"}`}
       >
-        <div className="flex min-w-0 shrink-0 gap-1 overflow-x-auto">
+        <div className="flex shrink-0 flex-wrap gap-1.5">
           {FILTERS.map((item) => (
             <button
               key={item.id}
@@ -78,14 +97,23 @@ export function Inbox() {
             </button>
           ))}
         </div>
+        <Input
+          value={loginQuery}
+          onChange={(event) => setLoginQuery(event.target.value)}
+          placeholder="Логин, например marina"
+          className="h-9 shrink-0 bg-white"
+          aria-label="Фильтр по логину"
+        />
         <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 lg:pb-2">
-          {comments === null ? <p className="text-sm text-muted-foreground">Открываем входящие…</p> : null}
-          {comments?.length === 0 ? (
+          {visibleComments === null ? <p className="text-sm text-muted-foreground">Открываем входящие…</p> : null}
+          {visibleComments?.length === 0 ? (
             <p className="rounded-2xl border border-dashed border-[#e4d8c4] p-4 text-sm text-muted-foreground">
-              Таких комментариев нет. Заберите их в разделе «Подключение».
+              {comments && comments.length > 0 && normalizeLogin(loginQuery)
+                ? "Нет комментариев с таким логином."
+                : "Таких комментариев нет. Заберите их в разделе «Подключение»."}
             </p>
           ) : null}
-          {comments?.map((comment) => (
+          {visibleComments?.map((comment) => (
             <button
               key={comment.id}
               type="button"

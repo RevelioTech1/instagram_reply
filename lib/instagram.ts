@@ -200,7 +200,7 @@ export async function fetchMedia(mediaId: string): Promise<{
 }
 
 /** Only the newest posts — a full feed walk trips Instagram rate limits. */
-export const RECENT_MEDIA_LIMIT = 10;
+export const RECENT_MEDIA_LIMIT = 20;
 /** Extra comment pages per post beyond the first embedded page (50 each). */
 const MAX_COMMENT_PAGES_PER_MEDIA = 3;
 

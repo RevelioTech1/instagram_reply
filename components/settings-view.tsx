@@ -219,7 +219,7 @@ export function SettingsView() {
     const data = (await response.json()) as { message?: string };
     setBusy("");
     if (!response.ok) setError(data.message || "Не удалось забрать комментарии.");
-    else setNotice(data.message || "Готово. Неотвеченные из последних 10 постов во входящих.");
+    else setNotice(data.message || "Готово. Неотвеченные из последних 20 постов во входящих.");
   }
 
   async function clearInbox() {
@@ -428,7 +428,7 @@ export function SettingsView() {
               Проверить подключение
             </Button>
             <Button variant="secondary" className="h-9" disabled={busy !== ""} onClick={() => void poll()}>
-              {busy === "poll" ? "Забираем…" : "Неотвеченные из 10 последних постов"}
+              {busy === "poll" ? "Забираем…" : "Неотвеченные из 20 последних постов"}
             </Button>
             <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void clearInbox()}>
               {busy === "clear" ? "Чистим…" : "Очистить входящие"}
@@ -440,9 +440,10 @@ export function SettingsView() {
             ) : null}
           </div>
           <p className="text-sm text-[#5c5348]">
-            Кнопка смотрит только 10 свежих постов и кладёт во входящие комментарии без публичного ответа от
-            аккаунта магазина. Полный обход ленты отключён — Instagram режет по лимитам. После деплоя старые
-            входящие очищаются один раз сами; дальше можно жать «Очистить входящие» и снова забрать свежие.
+            Кнопка смотрит 20 свежих постов и кладёт во входящие комментарии без публичного ответа от
+            аккаунта магазина; уже отвеченные магазином помечаются «Ответили». Полный обход ленты отключён —
+            Instagram режет по лимитам. После деплоя старые входящие очищаются один раз сами; дальше можно жать
+            «Очистить входящие» и снова забрать свежие.
           </p>
           {notice ? <p className="text-sm text-[#1c3b2c]">{notice}</p> : null}
           {error ? <p className="text-sm break-words text-[#9b2c2c]">{error}</p> : null}

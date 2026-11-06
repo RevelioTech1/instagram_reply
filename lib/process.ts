@@ -27,7 +27,11 @@ export type IncomingComment = {
   mediaUrl?: string | null;
 };
 
-export async function ingestComment(input: IncomingComment): Promise<CommentDTO | null> {
+export async function ingestComment(
+  input: IncomingComment,
+  options: { autoDeliver?: boolean } = {},
+): Promise<CommentDTO | null> {
+  const autoDeliver = options.autoDeliver !== false;
   const username = input.username.replace(/^@/, "") || "instagram";
   if (isOwnAccount(username, input.userId)) return null;
   const existing = getComment(input.id);
@@ -71,8 +75,41 @@ export async function ingestComment(input: IncomingComment): Promise<CommentDTO 
   } catch {
     return getComment(input.id);
   }
-  if (plan.status === "send") return deliverComment(input.id);
+  if (autoDeliver && plan.status === "send") return deliverComment(input.id);
   return getComment(input.id);
+}
+
+/**
+ * Keep comments already answered by the shop in Instagram: ingest if missing,
+ * then mark status «Ответили» instead of deleting them from the inbox.
+ */
+export async function syncShopAnsweredComment(input: IncomingComment & {
+  shopReplyText?: string | null;
+  shopReplyId?: string | null;
+}): Promise<{ comment: CommentDTO | null; changed: boolean }> {
+  const before = getComment(input.id);
+  if (before?.status === "replied" && (before.delivery === "instagram" || before.delivery === "local")) {
+    return { comment: before, changed: false };
+  }
+
+  let comment = before;
+  if (!comment) {
+    comment = await ingestComment(input, { autoDeliver: false });
+  }
+  if (!comment) return { comment: null, changed: false };
+
+  const replyPublic = (input.shopReplyText ?? "").trim() || comment.replyPublic;
+  return {
+    comment: markDelivery(comment.id, {
+      status: "replied",
+      delivery: "instagram",
+      replyError: null,
+      igReplyId: input.shopReplyId ?? comment.igReplyId,
+      replyPublic: replyPublic || undefined,
+      reason: "В Instagram уже есть публичный ответ от магазина.",
+    }),
+    changed: true,
+  };
 }
 
 export async function deliverComment(id: string): Promise<CommentDTO | null> {

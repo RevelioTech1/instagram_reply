@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  findBusinessReply,
   hasBusinessReply,
   isOwnAuthor,
   isTopLevelComment,
@@ -30,11 +31,19 @@ const answeredByStranger: IgCommentNode = {
   replies: { data: [{ id: "3a", text: "+", username: "friend" }] },
 };
 
-test("hasBusinessReply detects a reply from the shop account", () => {
+test("hasBusinessReply detects a reply from the shop account only", () => {
   assert.equal(hasBusinessReply(unanswered, ["iordani925"], ["ig-1"]), false);
   assert.equal(hasBusinessReply(answeredByBrand, ["iordani925"], ["ig-1"]), true);
   assert.equal(hasBusinessReply(answeredByBrand, ["Iordani925"], []), true);
   assert.equal(hasBusinessReply(answeredByStranger, ["iordani925"], ["ig-1"]), false);
+});
+
+test("findBusinessReply returns shop reply text and ignores stranger replies", () => {
+  assert.equal(findBusinessReply(unanswered, ["iordani925"], ["ig-1"]), null);
+  assert.equal(findBusinessReply(answeredByStranger, ["iordani925"], ["ig-1"]), null);
+  const shop = findBusinessReply(answeredByBrand, ["iordani925"], ["ig-1"]);
+  assert.equal(shop?.id, "2a");
+  assert.equal(shop?.text, "Да, СДЭК");
 });
 
 test("isTopLevelComment skips nested replies via parent_id", () => {

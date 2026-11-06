@@ -2,7 +2,7 @@ import { getSecrets, ownAccountIds, ownAccountNames, saveSecrets } from "./db.ts
 import { expiryFromNow, instagramErrorMessage } from "./ig-login.ts";
 import {
   commentAuthor,
-  hasBusinessReply,
+  findBusinessReply,
   isOwnAuthor,
   isTopLevelComment,
   type IgCommentNode,
@@ -21,6 +21,9 @@ export type RemoteComment = {
   caption: string;
   permalink: string | null;
   mediaUrl: string | null;
+  /** Public reply text from the shop account, when already answered in Instagram. */
+  shopReplyText?: string | null;
+  shopReplyId?: string | null;
 };
 
 export type ConnectionResult = {
@@ -235,7 +238,9 @@ export type ScanCommentHit = RemoteComment & { answeredOutside: boolean };
 
 /**
  * Read the newest Instagram posts (default 10) and split comments into unreplied vs
- * already answered publicly by the shop account. Never walks the full feed.
+ * already answered publicly by the shop account (iordani925 / connected IG user).
+ * Replies from other people do not count as answered — those stay unreplied.
+ * Never walks the full feed.
  */
 export async function collectCommentsFromMedia(options: {
   mediaLimit?: number;
@@ -280,6 +285,7 @@ export async function collectCommentsFromMedia(options: {
       if (!isTopLevelComment(comment)) continue;
       const author = commentAuthor(comment);
       if (isOwnAuthor(author, names, ids)) continue;
+      const shopReply = findBusinessReply(comment, names, ids);
       const remote: RemoteComment = {
         id: comment.id,
         text: comment.text,
@@ -290,8 +296,10 @@ export async function collectCommentsFromMedia(options: {
         caption: media.caption ?? "",
         permalink: media.permalink ?? null,
         mediaUrl: media.media_url ?? media.thumbnail_url ?? null,
+        shopReplyText: shopReply?.text ?? null,
+        shopReplyId: shopReply?.id ?? null,
       };
-      if (hasBusinessReply(comment, names, ids)) answered.push(remote);
+      if (shopReply) answered.push(remote);
       else unreplied.push(remote);
     }
   }

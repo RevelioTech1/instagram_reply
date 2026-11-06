@@ -39,14 +39,26 @@ export function isOwnAuthor(
   return false;
 }
 
+/**
+ * First nested reply authored by the shop account (e.g. iordani925).
+ * Replies from other users are ignored — those comments stay unanswered for us.
+ */
+export function findBusinessReply(
+  comment: IgCommentNode,
+  ownUsernames: Iterable<string>,
+  ownIds: Iterable<string> = [],
+): IgCommentNode | null {
+  for (const reply of comment.replies?.data ?? []) {
+    if (isOwnAuthor(commentAuthor(reply), ownUsernames, ownIds)) return reply;
+  }
+  return null;
+}
+
 /** True when any nested reply was written by the professional account we manage. */
 export function hasBusinessReply(
   comment: IgCommentNode,
   ownUsernames: Iterable<string>,
   ownIds: Iterable<string> = [],
 ): boolean {
-  for (const reply of comment.replies?.data ?? []) {
-    if (isOwnAuthor(commentAuthor(reply), ownUsernames, ownIds)) return true;
-  }
-  return false;
+  return findBusinessReply(comment, ownUsernames, ownIds) != null;
 }

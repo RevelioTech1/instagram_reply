@@ -584,11 +584,21 @@ export function updateReplies(id: string, replyPublic: string, replyPrivate: str
 
 export function markDelivery(
   id: string,
-  patch: { status: CommentDTO["status"]; delivery: CommentDTO["delivery"]; replyError: string | null; igReplyId?: string | null },
+  patch: {
+    status: CommentDTO["status"];
+    delivery: CommentDTO["delivery"];
+    replyError: string | null;
+    igReplyId?: string | null;
+    replyPublic?: string;
+    reason?: string;
+  },
 ): CommentDTO | null {
+  const current = getComment(id);
+  if (!current) return null;
   db()
     .prepare(
-      "update comments set status = ?, delivery = ?, reply_error = ?, ig_reply_id = ?, replied_at = ? where id = ?",
+      `update comments set status = ?, delivery = ?, reply_error = ?, ig_reply_id = ?, replied_at = ?,
+        reply_public = ?, reason = coalesce(?, reason) where id = ?`,
     )
     .run(
       patch.status,
@@ -596,6 +606,8 @@ export function markDelivery(
       patch.replyError,
       patch.igReplyId ?? null,
       patch.status === "replied" ? new Date().toISOString() : null,
+      patch.replyPublic !== undefined ? patch.replyPublic : current.replyPublic,
+      patch.reason ?? null,
       id,
     );
   return getComment(id);

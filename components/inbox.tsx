@@ -173,36 +173,141 @@ function CommentDetail({
   const [replyPrivate, setReplyPrivate] = useState(comment.replyPrivate);
   const [manualCode, setManualCode] = useState("");
   const [busy, setBusy] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [detailError, setDetailError] = useState("");
 
+  // Reset editors only when opening another comment — not on background list refresh.
   useEffect(() => {
     setReplyPublic(comment.replyPublic);
     setReplyPrivate(comment.replyPrivate);
     setManualCode("");
-  }, [comment.id, comment.replyPublic, comment.replyPrivate]);
+    setDirty(false);
+    setNotice("");
+    setDetailError("");
+  }, [comment.id]);
 
-  async function act(path: string, body?: unknown) {
-    setBusy(path);
-    const response = await fetch(path, {
-      method: path.endsWith("/skip") ? "POST" : "PATCH",
-      headers: body ? { "Content-Type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const data = (await response.json()) as { comment?: CommentDTO; error?: string };
-    setBusy("");
-    if (data.comment) onChange(data.comment);
+  // After a successful save (dirty cleared), keep local fields in sync with server props.
+  useEffect(() => {
+    if (dirty) return;
+    setReplyPublic(comment.replyPublic);
+    setReplyPrivate(comment.replyPrivate);
+  }, [comment.replyPublic, comment.replyPrivate, dirty]);
+
+  function editPublic(value: string) {
+    setReplyPublic(value);
+    setDirty(true);
+    setNotice("");
+    setDetailError("");
   }
 
-  async function send() {
-    setBusy("send");
-    await fetch(`/api/comments/${comment.id}`, {
+  function editPrivate(value: string) {
+    setReplyPrivate(value);
+    setDirty(true);
+    setNotice("");
+    setDetailError("");
+  }
+
+  async function readCommentResponse(response: Response): Promise<{ comment?: CommentDTO; error?: string }> {
+    try {
+      return (await response.json()) as { comment?: CommentDTO; error?: string };
+    } catch {
+      return { error: "Сервер вернул непонятный ответ." };
+    }
+  }
+
+  async function saveReplies(): Promise<CommentDTO | null> {
+    const response = await fetch(`/api/comments/${comment.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ replyPublic, replyPrivate }),
     });
-    const response = await fetch(`/api/comments/${comment.id}/send`, { method: "POST" });
-    const data = (await response.json()) as { comment?: CommentDTO };
+    const data = await readCommentResponse(response);
+    if (!response.ok || !data.comment) {
+      setDetailError(data.error || "Не удалось сохранить правку.");
+      return null;
+    }
+    setDirty(false);
+    setReplyPublic(data.comment.replyPublic);
+    setReplyPrivate(data.comment.replyPrivate);
+    onChange(data.comment);
+    return data.comment;
+  }
+
+  async function rememberEdit() {
+    setBusy("save");
+    setNotice("");
+    setDetailError("");
+    const saved = await saveReplies();
     setBusy("");
-    if (data.comment) onChange(data.comment);
+    if (saved) setNotice("Правка сохранена.");
+  }
+
+  async function skip() {
+    setBusy("skip");
+    setNotice("");
+    setDetailError("");
+    try {
+      const response = await fetch(`/api/comments/${comment.id}/skip`, { method: "POST" });
+      const data = await readCommentResponse(response);
+      if (!response.ok || !data.comment) {
+        setDetailError(data.error || "Не удалось пропустить комментарий.");
+      } else {
+        setDirty(false);
+        onChange(data.comment);
+      }
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function bindArticle() {
+    setBusy("bind");
+    setNotice("");
+    setDetailError("");
+    try {
+      const response = await fetch(`/api/comments/${comment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ manualCode }),
+      });
+      const data = await readCommentResponse(response);
+      if (!response.ok || !data.comment) {
+        setDetailError(data.error || "Не удалось привязать артикул.");
+      } else {
+        setDirty(false);
+        setReplyPublic(data.comment.replyPublic);
+        setReplyPrivate(data.comment.replyPrivate);
+        setManualCode("");
+        onChange(data.comment);
+        setNotice("Артикул привязан, ответ пересобран.");
+      }
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function send() {
+    setBusy("send");
+    setNotice("");
+    setDetailError("");
+    try {
+      const saved = await saveReplies();
+      if (!saved) return;
+      const response = await fetch(`/api/comments/${comment.id}/send`, { method: "POST" });
+      const data = await readCommentResponse(response);
+      if (!response.ok || !data.comment) {
+        setDetailError(data.error || "Не удалось отправить ответ.");
+        return;
+      }
+      setDirty(false);
+      setReplyPublic(data.comment.replyPublic);
+      setReplyPrivate(data.comment.replyPrivate);
+      onChange(data.comment);
+      setNotice(data.comment.delivery === "instagram" ? "Ответ ушёл в Instagram." : "Ответ сохранён.");
+    } finally {
+      setBusy("");
+    }
   }
 
   const local = comment.delivery === "local";
@@ -216,6 +321,7 @@ function CommentDetail({
           <Badge variant="secondary">{INTENT_LABEL[comment.primaryIntent]}</Badge>
           <Badge variant="outline">{STATUS_LABEL[comment.status]}</Badge>
           <span className="text-xs text-muted-foreground">{Math.round(comment.confidence * 100)}% уверенности</span>
+          {dirty ? <Badge variant="outline">Не сохранено</Badge> : null}
         </div>
         <p className="mt-3 text-sm text-[#5c5348]">
           @{comment.username} · {formatCommentWhen(comment.createdAt)}
@@ -259,40 +365,41 @@ function CommentDetail({
         <p className="mt-1 text-xs text-muted-foreground">
           Публично только артикул и ссылка на сайт. Цену в комментарий не пишем.
         </p>
-        <Textarea className="mt-3 min-h-32 bg-white" value={replyPublic} onChange={(event) => setReplyPublic(event.target.value)} />
+        <Textarea className="mt-3 min-h-32 bg-white" value={replyPublic} onChange={(event) => editPublic(event.target.value)} />
         {comment.primaryIntent === "none" ? null : (
           <>
             <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Директ (цена и кликабельная ссылка)</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Сначала уходит директ. Если он закрыт, под постом публикуется запасной текст про закрытый директ.
             </p>
-            <Textarea className="mt-2 min-h-32 bg-white" value={replyPrivate} onChange={(event) => setReplyPrivate(event.target.value)} />
+            <Textarea className="mt-2 min-h-32 bg-white" value={replyPrivate} onChange={(event) => editPrivate(event.target.value)} />
           </>
         )}
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
           <Button className="h-9" disabled={!canSend || busy !== ""} onClick={() => void send()}>
-            {comment.source === "demo" || comment.source === "simulator" ? "Сохранить как ответ" : "Отправить в Instagram"}
+            {busy === "send"
+              ? "Отправляем…"
+              : comment.source === "demo" || comment.source === "simulator"
+                ? "Сохранить как ответ"
+                : "Отправить в Instagram"}
           </Button>
           {skipped ? null : (
-            <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void act(`/api/comments/${comment.id}/skip`)}>
+            <Button variant="outline" className="h-9" disabled={busy !== ""} onClick={() => void skip()}>
               Не отвечать
             </Button>
           )}
-          <Button
-            variant="secondary"
-            className="h-9"
-            disabled={busy !== ""}
-            onClick={() => void act(`/api/comments/${comment.id}`, { replyPublic, replyPrivate })}
-          >
-            Запомнить правку
+          <Button variant="secondary" className="h-9" disabled={busy !== "" || !dirty} onClick={() => void rememberEdit()}>
+            {busy === "save" ? "Сохраняем…" : "Запомнить правку"}
           </Button>
         </div>
+        {notice ? <p className="mt-3 text-sm text-[#1c3b2c]">{notice}</p> : null}
+        {detailError ? <p className="mt-3 text-sm text-[#9b2c2c]">{detailError}</p> : null}
         {local ? (
           <p className="mt-3 text-sm text-[#1c3b2c]">
             Ответ сохранён локально. В Instagram он не ушёл: это учебный комментарий, живого id у него нет.
           </p>
         ) : null}
-        {comment.delivery === "instagram" ? (
+        {comment.delivery === "instagram" && !notice ? (
           <p className="mt-3 text-sm text-[#1c3b2c]">Ответ ушёл в Instagram.</p>
         ) : null}
         {comment.replyError ? <p className="mt-3 text-sm text-[#9b2c2c]">{comment.replyError}</p> : null}
@@ -300,7 +407,7 @@ function CommentDetail({
           className="mt-4 flex flex-col gap-2 border-t border-[#efe6d4] pt-4 sm:flex-row"
           onSubmit={(event) => {
             event.preventDefault();
-            void act(`/api/comments/${comment.id}`, { manualCode });
+            void bindArticle();
           }}
         >
           <input

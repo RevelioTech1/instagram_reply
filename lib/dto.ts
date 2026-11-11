@@ -58,6 +58,12 @@ export type SettingsDTO = {
   minConfidence: number;
   includePrice: boolean;
   phone: string;
+  siteLink: string;
+  address: string;
+  timetable: string;
+  publicTemplate: string;
+  privateTemplate: string;
+  dmClosedTemplate: string;
   priceSymbols: string[];
   reactToPraise: boolean;
   praiseReplies: string[];

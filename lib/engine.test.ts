@@ -3,6 +3,8 @@ import test from "node:test";
 import { buildIndex, prepareProduct } from "./catalog.ts";
 import { classifyIntent } from "./intent.ts";
 import { planComment } from "./plan.ts";
+import { buildDmClosedReply } from "./reply.ts";
+import { isDmUnavailableError } from "./templates.ts";
 import { DEFAULT_POLICY, type RawProduct } from "./types.ts";
 
 const ring: RawProduct = {
@@ -138,29 +140,35 @@ test("price question under a caption with an article links the exact card", () =
   assert.equal(result.status, "draft");
   assert.equal(result.products.length, 1);
   assert.equal(result.products[0].code, "Б-КО-338");
-  assert.match(result.replyPublic, /2\s600 ₽/);
-  assert.match(result.replyPublic, /koltso_b_ko_338_spasi_i_sokhrani/);
-  assert.doesNotMatch(result.replyPublic, /7\s000/);
+  assert.match(result.replyPublic, /Б-КО-338/);
+  assert.match(result.replyPublic, /iordani\.com/);
+  assert.doesNotMatch(result.replyPublic, /₽/);
+  assert.match(result.replyPrivate, /2\s600 ₽/);
+  assert.match(result.replyPrivate, /koltso_b_ko_338_spasi_i_sokhrani/);
+  assert.doesNotMatch(result.replyPrivate, /7\s000/);
   assert.doesNotMatch(result.replyPublic, /освящ/i);
 });
 
 test("latin article in the comment still finds the card", () => {
   const result = plan("B-KO-338 сколько стоит?", "Новинка этой недели");
   assert.equal(result.products[0]?.code, "Б-КО-338");
-  assert.match(result.replyPublic, /2\s600 ₽/);
+  assert.doesNotMatch(result.replyPublic, /₽/);
+  assert.match(result.replyPrivate, /2\s600 ₽/);
 });
 
 test("a plus sign asks the price of the piece in the caption", () => {
   const result = plan("+", "Кольцо Б-КО-565 «Молитва водителя».");
   assert.equal(result.primary, "price");
   assert.equal(result.status, "draft");
-  assert.match(result.replyPublic, /10\s100 ₽/);
+  assert.match(result.replyPublic, /Б-КО-565/);
+  assert.doesNotMatch(result.replyPublic, /₽/);
+  assert.match(result.replyPrivate, /10\s100 ₽/);
 });
 
 test("repeated plus signs and a trailing question mark still ask the price", () => {
   const result = plan("+++?", "арт. Б-КО-338");
   assert.equal(result.primary, "price");
-  assert.match(result.replyPublic, /2\s600 ₽/);
+  assert.match(result.replyPrivate, /2\s600 ₽/);
 });
 
 test("an article followed by a plus asks the price of that article", () => {
@@ -172,10 +180,10 @@ test("an article followed by a plus asks the price of that article", () => {
 test("a want-tag asks the price and a longer word does not", () => {
   const want = plan("Хочу!", "Кольцо Б-КО-565 «Молитва водителя».");
   assert.equal(want.primary, "price");
-  assert.match(want.replyPublic, /10\s100 ₽/);
+  assert.match(want.replyPrivate, /10\s100 ₽/);
   const phrase = plan("хочу такое", "арт. Б-КО-338");
   assert.equal(phrase.primary, "price");
-  assert.match(phrase.replyPublic, /2\s600 ₽/);
+  assert.match(phrase.replyPrivate, /2\s600 ₽/);
   assert.equal(plan("хочушка", "Б-КО-338").status, "skipped");
 });
 
@@ -217,42 +225,48 @@ test("earrings mentioned in the comment are not quoted as the ring", () => {
   );
   assert.equal(result.products.length, 1);
   assert.equal(result.products[0].categorySlug, "sergi");
-  assert.match(result.replyPublic, /7\s000 ₽/);
-  assert.doesNotMatch(result.replyPublic, /2\s600/);
+  assert.match(result.replyPrivate, /7\s000 ₽/);
+  assert.doesNotMatch(result.replyPrivate, /2\s600/);
+  assert.doesNotMatch(result.replyPublic, /₽/);
 });
 
 test("shared article is narrowed by the saint in the caption", () => {
   const result = plan("Цена?", "Кольцо Е-КО-367 Георгий Победоносец");
   assert.equal(result.products.length, 1);
   assert.match(result.products[0].name, /Георгий/);
-  assert.match(result.replyPublic, /5\s400 ₽/);
+  assert.match(result.replyPrivate, /5\s400 ₽/);
+  assert.doesNotMatch(result.replyPublic, /₽/);
 });
 
 test("a bare shared name does not invent one price", () => {
   const result = plan("сколько стоит спаси и сохрани", "");
   assert.equal(result.products.length, 0);
   assert.doesNotMatch(result.replyPublic, /₽/);
+  assert.doesNotMatch(result.replyPrivate, /₽/);
   assert.match(result.replyPublic, /артикул/i);
 });
 
 test("size question uses the card and does not invent a finger size", () => {
   const result = plan("Какой размер и вес?", "Б-КО-338");
-  assert.match(result.replyPublic, /маленькие/i);
-  assert.match(result.replyPublic, /15 рабочих дней/);
-  assert.doesNotMatch(result.replyPublic, /16 размер|17 размер|18 размер/);
+  assert.match(result.replyPrivate, /маленькие/i);
+  assert.match(result.replyPrivate, /15 рабочих дней/);
+  assert.doesNotMatch(result.replyPublic, /₽/);
+  assert.doesNotMatch(result.replyPrivate, /16 размер|17 размер|18 размер/);
 });
 
-test("shipping answer names CDEK and the product card", () => {
+test("shipping answer names CDEK and the product card in Direct", () => {
   const result = plan("Доставка в Казань есть?", "Подвеска Б-П-184 Матрона");
   assert.equal(result.primary, "shipping");
-  assert.match(result.replyPublic, /СДЭК/);
-  assert.match(result.replyPublic, /podveski\/matrona/);
+  assert.match(result.replyPrivate, /СДЭК/);
+  assert.match(result.replyPrivate, /podveski\/matrona/);
+  assert.doesNotMatch(result.replyPublic, /₽/);
 });
 
 test("auto mode would send a confident price reply", () => {
   const result = plan("цена?", "арт. Б-КО-565", auto);
   assert.equal(result.status, "send");
-  assert.match(result.replyPublic, /10\s100 ₽/);
+  assert.match(result.replyPrivate, /10\s100 ₽/);
+  assert.doesNotMatch(result.replyPublic, /₽/);
 });
 
 test("an unclear question stays for a person", () => {
@@ -260,5 +274,18 @@ test("an unclear question stays for a person", () => {
   assert.equal(intent.primary, "other");
   const result = plan("Можно ли крестить ребёнка в этом?", "Кольцо Б-КО-338");
   assert.equal(result.status, "needs_review");
-  assert.match(result.replyPublic, /8 800 222-32-13/);
+  assert.match(result.replyPublic + result.replyPrivate, /8 800 222-32-13/);
+});
+
+test("dm-closed template mentions sku and site without a price", () => {
+  const result = plan("+", "арт. Б-КО-338");
+  const closed = buildDmClosedReply({ products: result.products, policy: DEFAULT_POLICY });
+  assert.match(closed, /Б-КО-338/);
+  assert.match(closed, /iordani\.com|закрыт директ/i);
+  assert.doesNotMatch(closed, /₽/);
+});
+
+test("dm unavailable errors are recognized", () => {
+  assert.equal(isDmUnavailableError(new Error("[551] This person isn't receiving messages from you right now.")), true);
+  assert.equal(isDmUnavailableError(new Error("permission denied")), false);
 });

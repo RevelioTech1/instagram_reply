@@ -20,6 +20,12 @@ function rulesSnapshot(
     includePrice: settings.includePrice,
     minConfidence: settings.minConfidence,
     phone: settings.phone,
+    siteLink: settings.siteLink,
+    address: settings.address,
+    timetable: settings.timetable,
+    publicTemplate: settings.publicTemplate,
+    privateTemplate: settings.privateTemplate,
+    dmClosedTemplate: settings.dmClosedTemplate,
     reactToPraise: settings.reactToPraise,
     priceSymbols: parsePriceSymbols(symbolDraft ?? (settings.priceSymbols ?? []).join("\n")),
     praiseReplies: (praiseDraft ?? (settings.praiseReplies ?? []).join("\n"))
@@ -106,6 +112,12 @@ export function SettingsView() {
       includePrice: settings.includePrice,
       minConfidence: settings.minConfidence,
       phone: settings.phone,
+      siteLink: settings.siteLink,
+      address: settings.address,
+      timetable: settings.timetable,
+      publicTemplate: settings.publicTemplate,
+      privateTemplate: settings.privateTemplate,
+      dmClosedTemplate: settings.dmClosedTemplate,
       priceSymbols: parsePriceSymbols(symbolDraft ?? (settings.priceSymbols ?? []).join("\n")),
       reactToPraise: settings.reactToPraise,
       praiseReplies: (praiseDraft ?? (settings.praiseReplies ?? []).join("\n"))
@@ -288,19 +300,19 @@ export function SettingsView() {
           />
           <Toggle
             label="Ответ в комментарии"
-            hint="Короткий текст с ценой и ссылкой на карточку."
+            hint="Короткий текст без цены: артикул и ссылка на сайт / шапка профиля."
             checked={settings.publicReply}
             onChange={(publicReply) => setSettings({ ...settings, publicReply })}
           />
           <Toggle
-            label="Ссылка в директ"
-            hint="Одно личное сообщение на комментарий. Там ссылка обычно нажимается."
+            label="Полный ответ в директ"
+            hint="Сначала уходит директ с ценой и кликабельной ссылкой. Если директ закрыт — запасной комментарий."
             checked={settings.privateReply}
             onChange={(privateReply) => setSettings({ ...settings, privateReply })}
           />
           <Toggle
-            label="Называть цену, даже если спросили только ссылку"
-            hint="Если человек просит цену, сумма всё равно берётся из карточки."
+            label="Указывать цену в директе"
+            hint="Цену никогда не пишем публично в комментарии — только в личном сообщении."
             checked={settings.includePrice}
             onChange={(includePrice) => setSettings({ ...settings, includePrice })}
           />
@@ -344,9 +356,67 @@ export function SettingsView() {
               По одному тегу в строке. Слово вроде «хочу» и знак вроде «+» считаются вопросом о цене. «++» тоже, если в списке есть «+».
             </span>
           </label>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block text-sm sm:col-span-2">
+              Ссылка на сайт {"{{site_link}}"}
+              <Input
+                className="mt-1 h-9 bg-white"
+                value={settings.siteLink}
+                onChange={(event) => setSettings({ ...settings, siteLink: event.target.value })}
+              />
+            </label>
+            <label className="block text-sm">
+              Телефон {"{{phone_number}}"}
+              <Input
+                className="mt-1 h-9 bg-white"
+                value={settings.phone}
+                onChange={(event) => setSettings({ ...settings, phone: event.target.value })}
+              />
+            </label>
+            <label className="block text-sm">
+              Режим {"{{timetable}}"}
+              <Input
+                className="mt-1 h-9 bg-white"
+                value={settings.timetable}
+                onChange={(event) => setSettings({ ...settings, timetable: event.target.value })}
+              />
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              Адрес {"{{address}}"}
+              <Input
+                className="mt-1 h-9 bg-white"
+                value={settings.address}
+                onChange={(event) => setSettings({ ...settings, address: event.target.value })}
+              />
+            </label>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Переменные в шаблонах: {"{{sku}}"}, {"{{sku_price}}"}, {"{{sku_link}}"}, {"{{site_link}}"}, {"{{address}}"},{" "}
+            {"{{timetable}}"}, {"{{phone_number}}"}.
+          </p>
           <label className="block text-sm">
-            Телефон в ответах про доставку
-            <Input className="mt-1 h-9 bg-white" value={settings.phone} onChange={(event) => setSettings({ ...settings, phone: event.target.value })} />
+            Шаблон комментария (без цены)
+            <Textarea
+              className="mt-1 min-h-24 bg-white"
+              value={settings.publicTemplate}
+              onChange={(event) => setSettings({ ...settings, publicTemplate: event.target.value })}
+            />
+          </label>
+          <label className="block text-sm">
+            Шаблон директа (цена и кликабельная ссылка)
+            <Textarea
+              className="mt-1 min-h-32 bg-white"
+              value={settings.privateTemplate}
+              onChange={(event) => setSettings({ ...settings, privateTemplate: event.target.value })}
+            />
+          </label>
+          <label className="block text-sm">
+            Если директ закрыт — текст в комментарии
+            <Textarea
+              className="mt-1 min-h-24 bg-white"
+              value={settings.dmClosedTemplate}
+              onChange={(event) => setSettings({ ...settings, dmClosedTemplate: event.target.value })}
+            />
           </label>
         </section>
         <section className="space-y-4 rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">

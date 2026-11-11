@@ -255,13 +255,16 @@ function CommentDetail({
       ) : null}
 
       <div className="rounded-3xl border border-[#e4d8c4] bg-[#fffdf8] p-5">
-        <p className="text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Как это выглядит в комментарии</p>
+        <p className="text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Комментарий (без цены)</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Публично только артикул и ссылка на сайт. Цену в комментарий не пишем.
+        </p>
         <Textarea className="mt-3 min-h-32 bg-white" value={replyPublic} onChange={(event) => setReplyPublic(event.target.value)} />
         {comment.primaryIntent === "none" ? null : (
           <>
-            <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Личное сообщение со ссылкой</p>
+            <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Директ (цена и кликабельная ссылка)</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              В комментарии ссылка часто не нажимается. В директ она приходит рабочей, одно сообщение на комментарий.
+              Сначала уходит директ. Если он закрыт, под постом публикуется запасной текст про закрытый директ.
             </p>
             <Textarea className="mt-2 min-h-32 bg-white" value={replyPrivate} onChange={(event) => setReplyPrivate(event.target.value)} />
           </>

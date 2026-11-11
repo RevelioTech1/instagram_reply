@@ -16,6 +16,12 @@ export async function POST(request: Request) {
     minConfidence?: number;
     includePrice?: boolean;
     phone?: string;
+    siteLink?: string;
+    address?: string;
+    timetable?: string;
+    publicTemplate?: string;
+    privateTemplate?: string;
+    dmClosedTemplate?: string;
     priceSymbols?: string[];
     reactToPraise?: boolean;
     praiseReplies?: string[];
@@ -39,6 +45,12 @@ export async function POST(request: Request) {
     ...(body.minConfidence !== undefined ? { minConfidence: body.minConfidence } : {}),
     ...(body.includePrice !== undefined ? { includePrice: body.includePrice } : {}),
     ...(body.phone !== undefined ? { phone: body.phone } : {}),
+    ...(body.siteLink !== undefined ? { siteLink: body.siteLink } : {}),
+    ...(body.address !== undefined ? { address: body.address } : {}),
+    ...(body.timetable !== undefined ? { timetable: body.timetable } : {}),
+    ...(body.publicTemplate !== undefined ? { publicTemplate: body.publicTemplate } : {}),
+    ...(body.privateTemplate !== undefined ? { privateTemplate: body.privateTemplate } : {}),
+    ...(body.dmClosedTemplate !== undefined ? { dmClosedTemplate: body.dmClosedTemplate } : {}),
     ...(body.priceSymbols !== undefined ? { priceSymbols: body.priceSymbols } : {}),
     ...(body.reactToPraise !== undefined ? { reactToPraise: body.reactToPraise } : {}),
     ...(body.praiseReplies !== undefined ? { praiseReplies: body.praiseReplies } : {}),

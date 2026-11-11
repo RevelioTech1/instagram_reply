@@ -1,8 +1,19 @@
-import { formatMeasure, formatPrice, prettyName, sentence, clip } from "./format.ts";
-import type { IntentFlags, PreparedProduct } from "./types.ts";
+import { formatMeasure, prettyName, sentence, clip } from "./format.ts";
+import {
+  DEFAULT_DM_CLOSED_TEMPLATE,
+  DEFAULT_PRIVATE_TEMPLATE,
+  DEFAULT_PUBLIC_TEMPLATE,
+  productTemplateVars,
+  renderTemplate,
+} from "./templates.ts";
+import type { IntentFlags, Policy, PreparedProduct } from "./types.ts";
 import { CATALOG_HOME, CATEGORY_URLS } from "./types.ts";
 
-const PHONE_HOURS = "пн–пт, 9:00–18:00";
+export type BuiltReplies = {
+  publicReply: string;
+  privateReply: string;
+  dmClosedReply: string;
+};
 
 export function buildReplies(options: {
   flags: IntentFlags;
@@ -10,29 +21,66 @@ export function buildReplies(options: {
   context: PreparedProduct | null;
   categorySlug: string | null;
   ambiguousLabel: string | null;
-  includePrice: boolean;
-  phone: string;
-}): { publicReply: string; privateReply: string } {
-  const showPrice = options.flags.price || options.includePrice;
-  const publicReply = clip(compose({ ...options, showPrice, channel: "public" }));
-  const privateReply = clip(compose({ ...options, showPrice, channel: "private" }));
-  return { publicReply, privateReply };
+  policy: Policy;
+}): BuiltReplies {
+  const shop = shopFromPolicy(options.policy);
+  const publicTemplate = options.policy.publicTemplate?.trim() || DEFAULT_PUBLIC_TEMPLATE;
+  const privateTemplate = options.policy.privateTemplate?.trim() || DEFAULT_PRIVATE_TEMPLATE;
+  const dmClosedTemplate = options.policy.dmClosedTemplate?.trim() || DEFAULT_DM_CLOSED_TEMPLATE;
+
+  if (!hasCommercialAsk(options.flags)) {
+    const handoff = handoffText(options);
+    return {
+      publicReply: clip(handoff.publicReply),
+      privateReply: clip(handoff.privateReply),
+      dmClosedReply: clip(renderTemplate(dmClosedTemplate, productTemplateVars(options.products[0], shop))),
+    };
+  }
+
+  if (options.products.length === 1) {
+    const product = options.products[0];
+    const vars = productTemplateVars(product, shop);
+    const privateBody = [
+      renderTemplate(privateTemplate, vars),
+      ...extraPrivateFacts(product, options.flags),
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return {
+      publicReply: clip(renderTemplate(publicTemplate, vars)),
+      privateReply: clip(privateBody),
+      dmClosedReply: clip(renderTemplate(dmClosedTemplate, vars)),
+    };
+  }
+
+  if (options.products.length > 1) {
+    return clipAll(many(options, shop, publicTemplate, privateTemplate, dmClosedTemplate));
+  }
+
+  return clipAll(missing(options, shop, dmClosedTemplate));
 }
 
-function compose(options: {
-  flags: IntentFlags;
-  products: PreparedProduct[];
-  context: PreparedProduct | null;
-  categorySlug: string | null;
-  ambiguousLabel: string | null;
-  showPrice: boolean;
-  phone: string;
-  channel: "public" | "private";
+export function buildDmClosedReply(options: {
+  products: Array<{ code?: string; url?: string; price?: number | null }>;
+  policy: Policy;
 }): string {
-  if (!hasCommercialAsk(options.flags)) return handoff(options);
-  if (options.products.length === 1) return single(options, options.products[0]);
-  if (options.products.length > 1) return many(options);
-  return missing(options);
+  const shop = shopFromPolicy(options.policy);
+  const first = options.products[0];
+  const product = first
+    ? { code: first.code ?? "", url: first.url ?? "", price: first.price ?? null }
+    : null;
+  const template = options.policy.dmClosedTemplate?.trim() || DEFAULT_DM_CLOSED_TEMPLATE;
+  return clip(renderTemplate(template, productTemplateVars(product, shop)));
+}
+
+function shopFromPolicy(policy: Policy) {
+  return {
+    siteLink: policy.siteLink?.trim() || CATALOG_HOME,
+    address: policy.address?.trim() || "",
+    timetable: policy.timetable?.trim() || "пн–пт, 9:00–18:00",
+    phone: policy.phone?.trim() || "",
+    includePrice: policy.includePrice,
+  };
 }
 
 function hasCommercialAsk(flags: IntentFlags): boolean {
@@ -47,116 +95,156 @@ function hasCommercialAsk(flags: IntentFlags): boolean {
   );
 }
 
-function handoff(options: {
+function handoffText(options: {
   products: PreparedProduct[];
-  phone: string;
-}): string {
-  const product = options.products[0];
+  policy: Policy;
+}): BuiltReplies {
+  const shop = shopFromPolicy(options.policy);
+  const product = options.products[0] ?? null;
+  const vars = productTemplateVars(product, shop);
   if (product && options.products.length === 1) {
-    return [
-      `Здравствуйте! По изделию ${productLine(product, false)} лучше ответит мастерская: ${options.phone}, ${PHONE_HOURS}.`,
-      `Карточка: ${product.url}`,
-    ].join("\n");
+    return {
+      publicReply: `Здравствуйте! По изделию арт. {{sku}} лучше ответит мастерская — напишите нам в директ или на сайте {{site_link}}.`.replace(
+        /\{\{\s*([a-z_]+)\s*\}\}/gi,
+        (_, key: string) => vars[key as keyof typeof vars] ?? "",
+      ),
+      privateReply: [
+        `Здравствуйте! По изделию арт. ${product.code} лучше уточнить у мастерской.`,
+        `Карточка: ${product.url}`,
+        `Телефон: ${shop.phone}`,
+        `Режим: ${shop.timetable}`,
+        shop.address ? `Адрес: ${shop.address}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      dmClosedReply: renderTemplate(
+        options.policy.dmClosedTemplate?.trim() || DEFAULT_DM_CLOSED_TEMPLATE,
+        vars,
+      ),
+    };
   }
-  return [
-    `Здравствуйте! Чтобы ответить точно, лучше связаться с мастерской: ${options.phone}, ${PHONE_HOURS}.`,
-    `Каталог: ${CATALOG_HOME}`,
-  ].join("\n");
+  return {
+    publicReply: `Здравствуйте! Чтобы ответить точно, напишите нам в директ или посмотрите каталог: ${shop.siteLink}.`,
+    privateReply: [
+      "Здравствуйте! Чтобы ответить точно, напишите артикул или вопрос здесь.",
+      `Телефон: ${shop.phone}`,
+      `Режим: ${shop.timetable}`,
+      shop.address ? `Адрес: ${shop.address}` : "",
+      `Каталог: ${shop.siteLink}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    dmClosedReply: renderTemplate(
+      options.policy.dmClosedTemplate?.trim() || DEFAULT_DM_CLOSED_TEMPLATE,
+      vars,
+    ),
+  };
 }
 
-function single(
+function many(
+  options: {
+    flags: IntentFlags;
+    products: PreparedProduct[];
+    policy: Policy;
+  },
+  shop: ReturnType<typeof shopFromPolicy>,
+  publicTemplate: string,
+  privateTemplate: string,
+  dmClosedTemplate: string,
+): BuiltReplies {
+  const skus = options.products.map((product) => product.code).join(", ");
+  const first = productTemplateVars(options.products[0], shop);
+  const publicVars = { ...first, sku: skus };
+  const privateLines = [
+    "Здравствуйте! В этой публикации несколько изделий:",
+    ...options.products.flatMap((product, index) => {
+      const vars = productTemplateVars(product, shop);
+      const block = renderTemplate(privateTemplate, vars);
+      return [`${index + 1}.`, block];
+    }),
+    "Напишите артикул, если нужно разобрать одно из них.",
+  ];
+  if (options.flags.shipping) {
+    privateLines.push("Доставка СДЭК по России, срок считается при оформлении.");
+  }
+  return {
+    publicReply: renderTemplate(publicTemplate, publicVars),
+    privateReply: privateLines.join("\n"),
+    dmClosedReply: renderTemplate(dmClosedTemplate, publicVars),
+  };
+}
+
+function missing(
   options: {
     flags: IntentFlags;
     context: PreparedProduct | null;
-    showPrice: boolean;
-    phone: string;
-    channel: "public" | "private";
+    categorySlug: string | null;
+    ambiguousLabel: string | null;
+    policy: Policy;
   },
-  product: PreparedProduct,
-): string {
-  const lines = [`Здравствуйте! ${productLine(product, options.showPrice)}.`];
-  const facts = factLine(product, options.flags);
+  shop: ReturnType<typeof shopFromPolicy>,
+  dmClosedTemplate: string,
+): BuiltReplies {
+  const vars = productTemplateVars(options.context, shop);
+  let publicReply: string;
+  let privateReply: string;
+  if (options.ambiguousLabel) {
+    publicReply = `Здравствуйте! «${prettyName(options.ambiguousLabel)}» — так называются несколько изделий. Напишите артикул с фото — пришлём карточку в директ. Каталог: ${shop.siteLink}.`;
+    privateReply = [
+      `Здравствуйте! «${prettyName(options.ambiguousLabel)}» — несколько разных изделий.`,
+      "Напишите артикул с фото, и я открою нужную карточку.",
+      `Каталог: ${shop.siteLink}`,
+      `Телефон: ${shop.phone}`,
+    ].join("\n");
+  } else if (options.context && options.categorySlug && options.context.categorySlug !== options.categorySlug) {
+    const catalog = CATEGORY_URLS[options.categorySlug] ?? shop.siteLink;
+    publicReply = `Здравствуйте! В публикации арт. ${options.context.code}. Нужный раздел: ${catalog}.`;
+    privateReply = [
+      `Здравствуйте! В этой публикации ${options.context.kind} арт. ${options.context.code}.`,
+      "Отдельной карточки того, о чём вы спросили, в подписи нет.",
+      `Смотрите раздел: ${catalog}`,
+      `Телефон: ${shop.phone}`,
+    ].join("\n");
+  } else if (options.flags.other) {
+    publicReply = `Здравствуйте! Напишите нам в директ или позвоните ${shop.phone}. Сайт: ${shop.siteLink}.`;
+    privateReply = [
+      `Здравствуйте! Чтобы ответить точно, лучше связаться с мастерской: ${shop.phone}, ${shop.timetable}.`,
+      shop.address ? `Адрес: ${shop.address}` : "",
+      `Каталог: ${shop.siteLink}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
+  } else {
+    publicReply = `Здравствуйте! Напишите артикул с фото (например, Б-КО-338) — пришлём карточку в директ. Сайт: ${shop.siteLink}.`;
+    privateReply = [
+      "Здравствуйте! Чтобы не перепутать изделие, напишите артикул с фото (например, Б-КО-338) или точное название.",
+      `Каталог: ${shop.siteLink}`,
+      `Телефон: ${shop.phone}`,
+    ].join("\n");
+  }
+  return {
+    publicReply,
+    privateReply,
+    dmClosedReply: renderTemplate(dmClosedTemplate, { ...vars, sku: vars.sku || "—" }),
+  };
+}
+
+function extraPrivateFacts(product: PreparedProduct, flags: IntentFlags): string[] {
+  const lines: string[] = [];
+  const facts = factLine(product, flags);
   if (facts) lines.push(facts);
-  if (options.flags.size || options.flags.availability) {
+  if (flags.size || flags.availability) {
     lines.push(
       "Точный размер выбирается в карточке. Если его нет на складе, изготовление занимает около 15 рабочих дней.",
     );
   }
-  if (options.flags.wear) {
-    lines.push("Такие изделия носят каждый день.");
-  }
-  if (options.flags.shipping) {
+  if (flags.wear) lines.push("Такие изделия носят каждый день.");
+  if (flags.shipping) {
     lines.push(
       "Доставка СДЭК по России — до двери или в пункт выдачи. Срок и стоимость считаются при оформлении заказа.",
     );
   }
-  lines.push(`Карточка: ${product.url}`);
-  if (options.flags.shipping || options.flags.availability || options.channel === "private") {
-    lines.push(`Телефон: ${options.phone}, ${PHONE_HOURS}.`);
-  }
-  return lines.join("\n");
-}
-
-function many(options: {
-  flags: IntentFlags;
-  products: PreparedProduct[];
-  showPrice: boolean;
-  phone: string;
-  channel: "public" | "private";
-}): string {
-  const lines = ["Здравствуйте! В этой публикации несколько изделий:"];
-  options.products.forEach((product, index) => {
-    lines.push(`${index + 1}. ${productLine(product, options.showPrice || options.flags.price)}`);
-    lines.push(product.url);
-  });
-  lines.push("Напишите артикул, если нужно разобрать одно из них.");
-  if (options.flags.shipping) {
-    lines.push("Доставка СДЭК по России, срок считается при оформлении.");
-  }
-  if (options.channel === "private") lines.push(`Телефон: ${options.phone}, ${PHONE_HOURS}.`);
-  return lines.join("\n");
-}
-
-function missing(options: {
-  flags: IntentFlags;
-  context: PreparedProduct | null;
-  categorySlug: string | null;
-  ambiguousLabel: string | null;
-  phone: string;
-  channel: "public" | "private";
-}): string {
-  const lines: string[] = [];
-  if (options.ambiguousLabel) {
-    lines.push(
-      `Здравствуйте! «${prettyName(options.ambiguousLabel)}» — так называются несколько разных изделий. Напишите артикул с фото, и я открою нужную карточку.`,
-    );
-  } else if (options.context && options.categorySlug && options.context.categorySlug !== options.categorySlug) {
-    const catalog = CATEGORY_URLS[options.categorySlug] ?? CATALOG_HOME;
-    lines.push(
-      `Здравствуйте! В этой публикации ${productLine(options.context, false)}. Отдельной карточки того, о чём вы спросили, в подписи нет.`,
-    );
-    lines.push(`Смотрите раздел: ${catalog}`);
-  } else if (options.flags.other) {
-    lines.push(
-      `Здравствуйте! Чтобы ответить точно, лучше связаться с мастерской: ${options.phone}, ${PHONE_HOURS}.`,
-    );
-  } else {
-    lines.push(
-      "Здравствуйте! Чтобы не перепутать изделие, напишите артикул с фото (например, Б-КО-338) или точное название.",
-    );
-  }
-  lines.push(`Каталог: ${CATALOG_HOME}`);
-  if (options.channel === "private" && !options.flags.other) {
-    lines.push(`Телефон: ${options.phone}, ${PHONE_HOURS}.`);
-  }
-  return lines.join("\n");
-}
-
-function productLine(product: PreparedProduct, withPrice: boolean): string {
-  const name = product.name ? `${product.kind} «${prettyName(product.name)}»` : product.title;
-  const price = withPrice ? formatPrice(product.price) : null;
-  const priced = price ? ` — ${price}` : "";
-  return `${name}, арт. ${product.code}${priced}`;
+  return lines;
 }
 
 function factLine(product: PreparedProduct, flags: IntentFlags): string {
@@ -174,4 +262,12 @@ function factLine(product: PreparedProduct, flags: IntentFlags): string {
     if (weight) bits.push(`средний вес ${weight}`);
   }
   return sentence(bits.join(", "));
+}
+
+function clipAll(replies: BuiltReplies): BuiltReplies {
+  return {
+    publicReply: clip(replies.publicReply),
+    privateReply: clip(replies.privateReply),
+    dmClosedReply: clip(replies.dmClosedReply),
+  };
 }

@@ -67,8 +67,18 @@ export type Policy = {
   publicReply: boolean;
   privateReply: boolean;
   minConfidence: number;
+  /** Price goes only into the Direct message, never into the public comment. */
   includePrice: boolean;
   phone: string;
+  siteLink: string;
+  address: string;
+  timetable: string;
+  /** Public comment template (no price). Supports {{sku}}, {{site_link}}, … */
+  publicTemplate: string;
+  /** Direct message template with price and clickable {{sku_link}}. */
+  privateTemplate: string;
+  /** Public comment when Direct is closed / unreachable. */
+  dmClosedTemplate: string;
   priceSymbols: string[];
   reactToPraise: boolean;
   praiseReplies: string[];
@@ -99,6 +109,20 @@ export const DEFAULT_POLICY: Policy = {
   minConfidence: 0.82,
   includePrice: true,
   phone: "8 800 222-32-13",
+  siteLink: "https://iordani.com/",
+  address: "",
+  timetable: "пн–пт, 9:00–18:00",
+  publicTemplate:
+    "Здравствуйте! Артикул изделия {{sku}}. Подробности на сайте {{site_link}} (также ссылка в шапке профиля).",
+  privateTemplate: [
+    "Здравствуйте! Артикул {{sku}}, цена {{sku_price}}.",
+    "Карточка: {{sku_link}}",
+    "Телефон: {{phone_number}}",
+    "Режим: {{timetable}}",
+    "Адрес: {{address}}",
+  ].join("\n"),
+  dmClosedTemplate:
+    "К сожалению, у вас закрыт директ. Артикул изделия {{sku}} вы можете посмотреть на нашем сайте {{site_link}}",
   priceSymbols: ["+", "➕", "＋", "хочу", "хочу такое", "беру", "куплю", "закажу"],
   reactToPraise: true,
   praiseReplies: [

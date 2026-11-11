@@ -70,8 +70,7 @@ export function planComment(options: {
     context: match.context,
     categorySlug: match.categorySlug,
     ambiguousLabel: match.ambiguousLabel,
-    includePrice: options.policy.includePrice,
-    phone: options.policy.phone,
+    policy: options.policy,
   });
   const commercial = isCommercial(flags);
   let status: Plan["status"] = "draft";

@@ -9,7 +9,7 @@ import {
 } from "./ig-replies.ts";
 import type { AuthMode } from "./types.ts";
 
-type GraphError = { error?: { message?: string } };
+type GraphError = { error?: { message?: string; code?: number; error_subcode?: number } };
 
 export type RemoteComment = {
   id: string;
@@ -56,7 +56,14 @@ export async function graph<T>(
   });
   const payload = (await response.json()) as T & GraphError;
   if (!response.ok || payload.error) {
-    throw new Error(instagramErrorMessage(payload, response.status));
+    const base = instagramErrorMessage(payload, response.status);
+    const code = payload.error?.code;
+    const sub = payload.error?.error_subcode;
+    const tagged =
+      code != null || sub != null
+        ? `[${[code, sub].filter((item) => item != null).join("/")}] ${base}`
+        : base;
+    throw new Error(tagged);
   }
   return payload;
 }

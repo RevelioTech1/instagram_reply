@@ -12,6 +12,8 @@ import {
 } from "./db.ts";
 import { fetchMedia, publishPrivateReply, publishPublicReply } from "./instagram.ts";
 import { planComment } from "./plan.ts";
+import { buildDmClosedReply } from "./reply.ts";
+import { isDmUnavailableError } from "./templates.ts";
 import type { CommentDTO } from "./dto.ts";
 
 export type IncomingComment = {
@@ -112,6 +114,11 @@ export async function syncShopAnsweredComment(input: IncomingComment & {
   };
 }
 
+/**
+ * Send Direct first (full answer with price + clickable link). Then post a short
+ * public comment without price. If Direct is closed/unreachable, post the
+ * dm-closed template under the comment instead.
+ */
 export async function deliverComment(id: string): Promise<CommentDTO | null> {
   const comment = getComment(id);
   if (!comment) return null;
@@ -139,33 +146,54 @@ export async function deliverComment(id: string): Promise<CommentDTO | null> {
       replyError: "Ответ готов. Добавьте токен Instagram в настройках, чтобы отправить его.",
     });
   }
+
   const errors: string[] = [];
   let publicId: string | null = null;
   let sent = false;
-  if (policy.publicReply && comment.replyPublic) {
-    try {
-      publicId = await publishPublicReply(comment.id, comment.replyPublic);
-      sent = true;
-    } catch (error) {
-      errors.push(`комментарий: ${readable(error)}`);
-    }
-  }
-  if (policy.privateReply && comment.replyPrivate) {
+  let publicText = comment.replyPublic;
+  let dmClosed = false;
+
+  if (policy.privateReply && comment.replyPrivate.trim()) {
     try {
       await publishPrivateReply(comment.id, comment.replyPrivate);
       sent = true;
     } catch (error) {
-      errors.push(`директ: ${readable(error)}`);
+      if (isDmUnavailableError(error)) {
+        dmClosed = true;
+        publicText = buildDmClosedReply({ products: comment.products, policy });
+      } else {
+        errors.push(`директ: ${readable(error)}`);
+      }
     }
   }
+
+  if (policy.publicReply) {
+    const text = (dmClosed ? publicText : comment.replyPublic).trim();
+    if (text) {
+      try {
+        publicId = await publishPublicReply(comment.id, text);
+        sent = true;
+      } catch (error) {
+        errors.push(`комментарий: ${readable(error)}`);
+      }
+    }
+  }
+
   if (!policy.publicReply && !policy.privateReply) {
     errors.push("в настройках выключены и комментарий, и директ");
   }
+
   return markDelivery(id, {
     status: sent ? "replied" : "failed",
     delivery: sent ? "instagram" : "none",
-    replyError: errors.length ? errors.join("; ") : null,
+    replyError: errors.length
+      ? errors.join("; ")
+      : dmClosed
+        ? "Директ недоступен — в комментарий ушёл текст про закрытый директ."
+        : null,
     igReplyId: publicId,
+    replyPublic: dmClosed ? publicText : undefined,
+    reason: dmClosed ? "Директ закрыт: опубликовали запасной комментарий без цены." : undefined,
   });
 }
 
@@ -177,5 +205,6 @@ function readable(error: unknown): string {
   const message = error instanceof Error ? error.message : "неизвестная ошибка";
   if (/access token|OAuth/i.test(message)) return "токен отклонён";
   if (/permission/i.test(message)) return "у токена нет права отвечать на комментарии";
+  if (isDmUnavailableError(error)) return "директ закрыт или человек не принимает сообщения";
   return message;
 }

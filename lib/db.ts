@@ -272,6 +272,14 @@ export function savePolicy(patch: Partial<Policy>): Policy {
   const next = { ...getPolicy(), ...patch };
   next.minConfidence = Math.min(0.99, Math.max(0.5, Number(next.minConfidence) || 0.82));
   next.phone = String(next.phone || DEFAULT_POLICY.phone).trim();
+  next.siteLink = String(next.siteLink || DEFAULT_POLICY.siteLink).trim() || DEFAULT_POLICY.siteLink;
+  next.address = String(next.address ?? "").trim();
+  next.timetable = String(next.timetable || DEFAULT_POLICY.timetable).trim() || DEFAULT_POLICY.timetable;
+  next.publicTemplate = String(next.publicTemplate || DEFAULT_POLICY.publicTemplate).trim() || DEFAULT_POLICY.publicTemplate;
+  next.privateTemplate =
+    String(next.privateTemplate || DEFAULT_POLICY.privateTemplate).trim() || DEFAULT_POLICY.privateTemplate;
+  next.dmClosedTemplate =
+    String(next.dmClosedTemplate || DEFAULT_POLICY.dmClosedTemplate).trim() || DEFAULT_POLICY.dmClosedTemplate;
   next.priceSymbols = parsePriceSymbols(
     Array.isArray(next.priceSymbols) ? next.priceSymbols.join("\n") : DEFAULT_POLICY.priceSymbols.join("\n"),
   );

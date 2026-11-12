@@ -171,7 +171,6 @@ function CommentDetail({
 }) {
   const [replyPublic, setReplyPublic] = useState(comment.replyPublic);
   const [replyPrivate, setReplyPrivate] = useState(comment.replyPrivate);
-  const [manualCode, setManualCode] = useState("");
   const [busy, setBusy] = useState("");
   const [dirty, setDirty] = useState(false);
   const [notice, setNotice] = useState("");
@@ -181,7 +180,6 @@ function CommentDetail({
   useEffect(() => {
     setReplyPublic(comment.replyPublic);
     setReplyPrivate(comment.replyPrivate);
-    setManualCode("");
     setDirty(false);
     setNotice("");
     setDetailError("");
@@ -261,32 +259,6 @@ function CommentDetail({
     }
   }
 
-  async function bindArticle() {
-    setBusy("bind");
-    setNotice("");
-    setDetailError("");
-    try {
-      const response = await fetch(`/api/comments/${comment.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ manualCode }),
-      });
-      const data = await readCommentResponse(response);
-      if (!response.ok || !data.comment) {
-        setDetailError(data.error || "Не удалось привязать артикул.");
-      } else {
-        setDirty(false);
-        setReplyPublic(data.comment.replyPublic);
-        setReplyPrivate(data.comment.replyPrivate);
-        setManualCode("");
-        onChange(data.comment);
-        setNotice("Артикул привязан, ответ пересобран.");
-      }
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function send() {
     setBusy("send");
     setNotice("");
@@ -330,7 +302,7 @@ function CommentDetail({
         <p className="mt-3 text-sm text-[#5c5348]">{comment.reason}</p>
         <p className="mt-4 text-xs tracking-[0.14em] text-[#8c6a32] uppercase">Подпись поста</p>
         <p className="mt-1 text-sm whitespace-pre-wrap text-[#3d342b]">
-          {comment.post.caption || "Подписи нет. Добавьте артикул в пост или привяжите изделие вручную."}
+          {comment.post.caption || "Подписи нет. Бот ищет артикул в подписи поста или в тексте комментария."}
         </p>
         {comment.post.permalink ? (
           <a className="mt-2 inline-block text-sm text-[#6d2e32] underline" href={comment.post.permalink} target="_blank" rel="noreferrer">
@@ -403,23 +375,6 @@ function CommentDetail({
           <p className="mt-3 text-sm text-[#1c3b2c]">Ответ ушёл в Instagram.</p>
         ) : null}
         {comment.replyError ? <p className="mt-3 text-sm text-[#9b2c2c]">{comment.replyError}</p> : null}
-        <form
-          className="mt-4 flex flex-col gap-2 border-t border-[#efe6d4] pt-4 sm:flex-row"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void bindArticle();
-          }}
-        >
-          <input
-            value={manualCode}
-            onChange={(event) => setManualCode(event.target.value)}
-            placeholder="Другой артикул, если бот промахнулся"
-            className="h-9 flex-1 rounded-lg border border-[#e4d8c4] bg-white px-3 text-sm"
-          />
-          <Button type="submit" variant="outline" className="h-9" disabled={!manualCode.trim() || busy !== ""}>
-            Привязать
-          </Button>
-        </form>
       </div>
     </div>
   );

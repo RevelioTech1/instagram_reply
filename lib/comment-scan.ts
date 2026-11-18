@@ -1,6 +1,4 @@
-import { deleteOrphanPosts, getComment } from "./db.ts";
-import { collectCommentsFromMedia, RECENT_MEDIA_LIMIT } from "./instagram.ts";
-import { ingestComment, syncShopAnsweredComment } from "./process.ts";
+import { runInboxPoll } from "./inbox-poll.ts";
 
 export type CommentScanState = {
   running: boolean;
@@ -53,53 +51,13 @@ export function startFullCommentScan(): CommentScanState {
 }
 
 async function runRecentCommentScan(): Promise<void> {
-  const { unreplied, answered } = await collectCommentsFromMedia({
-    mediaLimit: RECENT_MEDIA_LIMIT,
-    onMedia: ({ scanned }) => {
-      state.mediaScanned = scanned;
-    },
-  });
-
-  for (const comment of answered) {
-    const result = await syncShopAnsweredComment({
-      id: comment.id,
-      mediaId: comment.mediaId,
-      username: comment.username,
-      userId: comment.userId,
-      text: comment.text,
-      createdAt: comment.timestamp,
-      source: "poll",
-      caption: comment.caption,
-      permalink: comment.permalink,
-      mediaUrl: comment.mediaUrl,
-      shopReplyText: comment.shopReplyText,
-      shopReplyId: comment.shopReplyId,
-    });
-    if (result.changed) {
-      state.markedAnswered += 1;
-      state.removedAnswered = state.markedAnswered;
-    }
-  }
-
-  state.unrepliedFound = unreplied.length;
-  for (const comment of unreplied) {
-    const before = getComment(comment.id);
-    const saved = await ingestComment({
-      id: comment.id,
-      mediaId: comment.mediaId,
-      username: comment.username,
-      userId: comment.userId,
-      text: comment.text,
-      createdAt: comment.timestamp,
-      source: "poll",
-      caption: comment.caption,
-      permalink: comment.permalink,
-      mediaUrl: comment.mediaUrl,
-    });
-    if (saved && !before) state.ingested += 1;
-  }
-
-  state.orphansRemoved = deleteOrphanPosts();
+  const result = await runInboxPoll();
+  state.mediaScanned = result.mediaScanned;
+  state.unrepliedFound = result.unreplied;
+  state.ingested = result.ingested;
+  state.markedAnswered = result.marked;
+  state.removedAnswered = result.marked;
+  state.orphansRemoved = 0;
   state.running = false;
   state.finishedAt = new Date().toISOString();
 }

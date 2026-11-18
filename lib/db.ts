@@ -395,6 +395,19 @@ export function listComments(status?: string | null): CommentDTO[] {
   return rows.map(commentFromRow);
 }
 
+/** Open inbox rows that may still need a shop-reply check on Instagram. */
+export function listOpenComments(limit = 150): CommentDTO[] {
+  const rows = db()
+    .prepare(
+      `select * from comments
+       where status in ('draft', 'needs_review', 'failed')
+       order by created_at desc
+       limit ?`,
+    )
+    .all(Math.max(1, limit)) as SqlRow[];
+  return rows.map(commentFromRow);
+}
+
 export function getComment(id: string): CommentDTO | null {
   const row = db().prepare("select * from comments where id = ?").get(id) as SqlRow | undefined;
   return row ? commentFromRow(row) : null;

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   findBusinessReply,
+  findBusinessReplyAmong,
   hasBusinessReply,
   isOwnAuthor,
   isTopLevelComment,
@@ -57,4 +58,14 @@ test("isOwnAuthor matches shop username or ig user id", () => {
   assert.equal(isOwnAuthor({ username: "Iordani925" }, ["iordani925"], []), true);
   assert.equal(isOwnAuthor({ id: "ig-1", username: "" }, ["iordani925"], ["ig-1"]), true);
   assert.equal(isOwnAuthor({ username: "buyer" }, ["iordani925"], ["ig-1"]), false);
+});
+
+test("findBusinessReplyAmong picks the shop reply from a flat /replies list", () => {
+  const replies: IgCommentNode[] = [
+    { id: "a", text: "+", username: "friend" },
+    { id: "b", text: "Цена в Direct", username: "iordani925" },
+  ];
+  const shop = findBusinessReplyAmong(replies, ["iordani925"], ["ig-1"]);
+  assert.equal(shop?.id, "b");
+  assert.equal(findBusinessReplyAmong(replies.slice(0, 1), ["iordani925"], ["ig-1"]), null);
 });

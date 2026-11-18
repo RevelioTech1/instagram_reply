@@ -48,7 +48,15 @@ export function findBusinessReply(
   ownUsernames: Iterable<string>,
   ownIds: Iterable<string> = [],
 ): IgCommentNode | null {
-  for (const reply of comment.replies?.data ?? []) {
+  return findBusinessReplyAmong(comment.replies?.data ?? [], ownUsernames, ownIds);
+}
+
+export function findBusinessReplyAmong(
+  replies: IgCommentNode[],
+  ownUsernames: Iterable<string>,
+  ownIds: Iterable<string> = [],
+): IgCommentNode | null {
+  for (const reply of replies) {
     if (isOwnAuthor(commentAuthor(reply), ownUsernames, ownIds)) return reply;
   }
   return null;

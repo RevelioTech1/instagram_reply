@@ -7,10 +7,11 @@ import {
   getSecrets,
   insertPlanned,
   isOwnAccount,
+  listOpenComments,
   markDelivery,
   type StoredPlan,
 } from "./db.ts";
-import { fetchMedia, publishPrivateReply, publishPublicReply } from "./instagram.ts";
+import { fetchMedia, fetchShopReplyForComment, publishPrivateReply, publishPublicReply } from "./instagram.ts";
 import { planComment } from "./plan.ts";
 import { buildDmClosedReply } from "./reply.ts";
 import { isDmUnavailableError } from "./templates.ts";
@@ -112,6 +113,46 @@ export async function syncShopAnsweredComment(input: IncomingComment & {
     }),
     changed: true,
   };
+}
+
+/**
+ * For open inbox drafts, hit GET /{comment-id}/replies and mark «Ответили»
+ * when the shop already replied from the Instagram app/UI.
+ */
+export async function reconcileOpenShopReplies(options: {
+  limit?: number;
+  skipIds?: ReadonlySet<string>;
+} = {}): Promise<{ checked: number; marked: number }> {
+  const open = listOpenComments(options.limit ?? 150);
+  let checked = 0;
+  let marked = 0;
+  for (const local of open) {
+    if (options.skipIds?.has(local.id)) continue;
+    // Demo / simulator rows are not real Graph comment ids.
+    if (!/^\d+$/.test(local.id)) continue;
+    checked += 1;
+    try {
+      const shop = await fetchShopReplyForComment(local.id);
+      if (!shop) continue;
+      const result = await syncShopAnsweredComment({
+        id: local.id,
+        mediaId: local.mediaId,
+        username: local.username,
+        text: local.text,
+        createdAt: local.createdAt,
+        source: "poll",
+        caption: local.post.caption,
+        permalink: local.post.permalink,
+        mediaUrl: local.post.mediaUrl,
+        shopReplyText: shop.text,
+        shopReplyId: shop.id,
+      });
+      if (result.changed) marked += 1;
+    } catch {
+      // One bad comment must not stop the rest of the inbox reconcile.
+    }
+  }
+  return { checked, marked };
 }
 
 /**

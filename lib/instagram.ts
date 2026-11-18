@@ -3,6 +3,7 @@ import { expiryFromNow, instagramErrorMessage } from "./ig-login.ts";
 import {
   commentAuthor,
   findBusinessReply,
+  findBusinessReplyAmong,
   isOwnAuthor,
   isTopLevelComment,
   type IgCommentNode,
@@ -215,6 +216,9 @@ const MAX_COMMENT_PAGES_PER_MEDIA = 3;
 
 const COMMENT_FIELDS =
   "id,text,username,timestamp,parent_id,from{id,username},replies.limit(50){id,text,username,from{id,username}}";
+const REPLY_FIELDS = "id,text,username,timestamp,from{id,username}";
+/** Extra pages on GET /{comment-id}/replies when marking shop answers. */
+const MAX_REPLY_PAGES = 3;
 
 type MediaPageItem = {
   id: string;
@@ -370,9 +374,62 @@ async function listMediaComments(
     after = page.paging?.cursors?.after;
     if (!(page.data?.length ?? 0)) break;
   }
-  // Do not page /replies — that multiplies API calls and trips rate limits.
-  // Brand replies usually appear in the first embedded replies.limit(50) page.
+  // Nested replies are verified separately for open drafts via listCommentReplies.
   return collected;
+}
+
+/**
+ * Page GET /{ig-comment-id}/replies. Embedded `replies` on media comments are often
+ * empty or truncated on Instagram Login — this edge is the reliable source.
+ */
+export async function listCommentReplies(
+  commentId: string,
+  options?: { token?: string; version?: string; authMode?: AuthMode },
+): Promise<IgCommentNode[]> {
+  const secrets = getSecrets();
+  const token = options?.token || secrets.accessToken;
+  if (!token) return [];
+  const version = options?.version || secrets.graphVersion || "v23.0";
+  const authMode = options?.authMode ?? secrets.authMode;
+  const collected: IgCommentNode[] = [];
+  let after: string | undefined;
+  let pages = 0;
+  while (pages < MAX_REPLY_PAGES) {
+    pages += 1;
+    const query: Record<string, string> = {
+      fields: REPLY_FIELDS,
+      limit: "50",
+    };
+    if (after) query.after = after;
+    const page = await graph<Paged<IgCommentNode>>(`${commentId}/replies`, {
+      token,
+      version,
+      authMode,
+      query,
+    });
+    const batch = page.data ?? [];
+    collected.push(...batch);
+    after = page.paging?.cursors?.after;
+    if (!batch.length || !after) break;
+  }
+  return collected;
+}
+
+/** First public reply under a comment that was authored by the connected shop account. */
+export async function fetchShopReplyForComment(
+  commentId: string,
+): Promise<{ id: string; text: string } | null> {
+  await refreshInstagramTokenIfNeeded();
+  const { names, ids, secrets } = ownIdentity();
+  if (!secrets.accessToken) return null;
+  const replies = await listCommentReplies(commentId, {
+    token: secrets.accessToken,
+    version: secrets.graphVersion || "v23.0",
+    authMode: secrets.authMode,
+  });
+  const shop = findBusinessReplyAmong(replies, names, ids);
+  if (!shop) return null;
+  return { id: shop.id, text: shop.text ?? "" };
 }
 
 export async function publishPublicReply(commentId: string, message: string): Promise<string | null> {

@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Survive a dropped GitHub Actions SSH session during long docker builds.
-trap '' HUP
 cd /home/web/insta
+
+# Orphaned deploy.sh processes (left by dropped GitHub Actions SSH) hold the
+# flock and block every later deploy. Stop them before we take the lock.
+self=$$
+while read -r pid; do
+  [[ -n "${pid}" && "${pid}" != "${self}" ]] || continue
+  echo "Stopping orphaned deploy pid=${pid}"
+  kill "${pid}" 2>/dev/null || true
+done < <(pgrep -f '/home/web/insta/deploy/deploy.sh' || true)
+sleep 2
+
 exec 9>/var/lock/insta-deploy.lock
-flock -w 900 9
+if ! flock -w 120 9; then
+  echo "Could not acquire /var/lock/insta-deploy.lock within 120s" >&2
+  exit 1
+fi
 
 # Compose requires PANEL_PASSWORD. .env is not uploaded by rsync; create one if missing.
 ensure_panel_env() {
@@ -38,9 +50,27 @@ ensure_panel_env() {
   echo "============================================================"
 }
 
+# Keep the Actions SSH session alive: quiet npm ci otherwise idles TCP for ~15m.
+build_with_heartbeat() {
+  local logfile=/tmp/insta-docker-build.log
+  : >"${logfile}"
+  docker compose build --progress=plain > >(tee -a "${logfile}") 2>&1 &
+  local build_pid=$!
+  while kill -0 "${build_pid}" 2>/dev/null; do
+    echo "[deploy] building… $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    sleep 20
+  done
+  if ! wait "${build_pid}"; then
+    echo "[deploy] docker compose build failed" >&2
+    tail -n 80 "${logfile}" >&2 || true
+    return 1
+  fi
+  echo "[deploy] image build finished"
+}
+
 ensure_panel_env
 docker compose config --quiet
-docker compose build
+build_with_heartbeat
 # Take a consistent SQLite backup before changing the running application.
 mkdir -p /home/web/insta-backups
 if docker compose ps --status running --services | grep -qx app; then

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Survive a dropped GitHub Actions SSH session during long docker builds.
+trap '' HUP
 cd /home/web/insta
 exec 9>/var/lock/insta-deploy.lock
 flock -w 900 9

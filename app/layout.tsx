@@ -1,18 +1,7 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Manrope } from "next/font/google";
 import { Shell } from "@/components/shell";
+import "./fonts.css";
 import "./globals.css";
-
-const sans = Manrope({
-  subsets: ["latin", "cyrillic"],
-  variable: "--font-manrope",
-});
-
-const display = Cormorant_Garamond({
-  subsets: ["latin", "cyrillic"],
-  weight: ["500", "600", "700"],
-  variable: "--font-display-family",
-});
 
 export const metadata: Metadata = {
   title: "Иордань — ответы на комментарии",
@@ -21,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ru" className={`${sans.variable} ${display.variable}`}>
+    <html lang="ru">
       <body className="antialiased">
         <Shell>{children}</Shell>
       </body>

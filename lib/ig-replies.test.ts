@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  commentAuthor,
   findBusinessReply,
   findBusinessReplyAmong,
   hasBusinessReply,
@@ -58,6 +59,14 @@ test("isOwnAuthor matches shop username or ig user id", () => {
   assert.equal(isOwnAuthor({ username: "Iordani925" }, ["iordani925"], []), true);
   assert.equal(isOwnAuthor({ id: "ig-1", username: "" }, ["iordani925"], ["ig-1"]), true);
   assert.equal(isOwnAuthor({ username: "buyer" }, ["iordani925"], ["ig-1"]), false);
+});
+
+test("commentAuthor reads username from user{} when from{} is missing", () => {
+  assert.equal(
+    commentAuthor({ id: "1", user: { id: "ig-1", username: "iordani925" } }).username,
+    "iordani925",
+  );
+  assert.equal(commentAuthor({ id: "1", user: { id: "ig-1", username: "iordani925" } }).id, "ig-1");
 });
 
 test("findBusinessReplyAmong picks the shop reply from a flat /replies list", () => {

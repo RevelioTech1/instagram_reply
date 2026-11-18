@@ -1,4 +1,4 @@
-import { deleteOrphanPosts, getComment, getSecrets } from "./db.ts";
+import { deleteOrphanPosts, getComment, getSecrets, listOpenComments } from "./db.ts";
 import {
   DEFAULT_INBOX_POLL_INTERVAL_MS,
   DEFAULT_INBOX_POLL_RETRY_MS,
@@ -81,8 +81,10 @@ async function executeInboxPoll(): Promise<InboxPollResult> {
     throw new Error("Сначала проверьте подключение: нужен токен и id аккаунта Instagram.");
   }
 
+  const openIds = new Set(listOpenComments(2000).map((comment) => comment.id));
   const { unreplied, answered, mediaScanned } = await collectCommentsFromMedia({
     mediaLimit: RECENT_MEDIA_LIMIT,
+    verifyReplyIds: openIds,
   });
 
   let marked = 0;
@@ -124,7 +126,8 @@ async function executeInboxPoll(): Promise<InboxPollResult> {
     if (saved && !before) ingested += 1;
   }
 
-  const reconciled = await reconcileOpenShopReplies({ skipIds: answeredIds });
+  // Covers open drafts whose posts fell outside the last-50 media window.
+  const reconciled = await reconcileOpenShopReplies({ skipIds: answeredIds, limit: 2000 });
   marked += reconciled.marked;
   deleteOrphanPosts();
 
@@ -137,11 +140,17 @@ async function executeInboxPoll(): Promise<InboxPollResult> {
     reconciled: reconciled.marked,
     mediaScanned,
     mediaLimit: RECENT_MEDIA_LIMIT,
-    message:
-      `Просмотрели ${mediaScanned} из ${RECENT_MEDIA_LIMIT} постов: неотвеченных ${unreplied.length} (новых ${ingested}). ` +
-      `С ответом магазина пометили «Ответили»: ${marked}` +
-      (reconciled.marked ? ` (из них через /replies: ${reconciled.marked})` : "") +
-      ".",
+    message: (() => {
+      const extras: string[] = [];
+      if (reconciled.marked) extras.push(`через /replies: ${reconciled.marked}`);
+      if (reconciled.errors) extras.push(`ошибок сверки: ${reconciled.errors}`);
+      return (
+        `Просмотрели ${mediaScanned} из ${RECENT_MEDIA_LIMIT} постов: неотвеченных ${unreplied.length} (новых ${ingested}). ` +
+        `С ответом магазина пометили «Ответили»: ${marked}` +
+        (extras.length ? ` (${extras.join(", ")})` : "") +
+        "."
+      );
+    })(),
   };
 }
 

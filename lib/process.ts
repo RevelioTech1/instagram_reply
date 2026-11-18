@@ -118,41 +118,55 @@ export async function syncShopAnsweredComment(input: IncomingComment & {
 /**
  * For open inbox drafts, hit GET /{comment-id}/replies and mark «Ответили»
  * when the shop already replied from the Instagram app/UI.
+ * Walks oldest drafts first (limit covers the whole waiting inbox, not just newest 150).
  */
 export async function reconcileOpenShopReplies(options: {
   limit?: number;
   skipIds?: ReadonlySet<string>;
-} = {}): Promise<{ checked: number; marked: number }> {
-  const open = listOpenComments(options.limit ?? 150);
+  concurrency?: number;
+} = {}): Promise<{ checked: number; marked: number; errors: number }> {
+  const open = listOpenComments(options.limit ?? 2000).filter((local) => {
+    if (options.skipIds?.has(local.id)) return false;
+    // Demo / simulator rows are not real Graph comment ids.
+    return /^\d+$/.test(local.id);
+  });
+  const concurrency = Math.max(1, Math.min(options.concurrency ?? 6, 12));
   let checked = 0;
   let marked = 0;
-  for (const local of open) {
-    if (options.skipIds?.has(local.id)) continue;
-    // Demo / simulator rows are not real Graph comment ids.
-    if (!/^\d+$/.test(local.id)) continue;
-    checked += 1;
-    try {
-      const shop = await fetchShopReplyForComment(local.id);
-      if (!shop) continue;
-      const result = await syncShopAnsweredComment({
-        id: local.id,
-        mediaId: local.mediaId,
-        username: local.username,
-        text: local.text,
-        createdAt: local.createdAt,
-        source: "poll",
-        caption: local.post.caption,
-        permalink: local.post.permalink,
-        mediaUrl: local.post.mediaUrl,
-        shopReplyText: shop.text,
-        shopReplyId: shop.id,
-      });
-      if (result.changed) marked += 1;
-    } catch {
-      // One bad comment must not stop the rest of the inbox reconcile.
+  let errors = 0;
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (cursor < open.length) {
+      const index = cursor;
+      cursor += 1;
+      const local = open[index];
+      checked += 1;
+      try {
+        const shop = await fetchShopReplyForComment(local.id);
+        if (!shop) continue;
+        const result = await syncShopAnsweredComment({
+          id: local.id,
+          mediaId: local.mediaId,
+          username: local.username,
+          text: local.text,
+          createdAt: local.createdAt,
+          source: "poll",
+          caption: local.post.caption,
+          permalink: local.post.permalink,
+          mediaUrl: local.post.mediaUrl,
+          shopReplyText: shop.text,
+          shopReplyId: shop.id,
+        });
+        if (result.changed) marked += 1;
+      } catch {
+        errors += 1;
+      }
     }
   }
-  return { checked, marked };
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  return { checked, marked, errors };
 }
 
 /**

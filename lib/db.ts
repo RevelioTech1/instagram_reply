@@ -395,13 +395,13 @@ export function listComments(status?: string | null): CommentDTO[] {
   return rows.map(commentFromRow);
 }
 
-/** Open inbox rows that may still need a shop-reply check on Instagram. */
-export function listOpenComments(limit = 150): CommentDTO[] {
+/** Open inbox rows that may still need a shop-reply check on Instagram. Oldest first — stuck drafts first. */
+export function listOpenComments(limit = 2000): CommentDTO[] {
   const rows = db()
     .prepare(
       `select * from comments
        where status in ('draft', 'needs_review', 'failed')
-       order by created_at desc
+       order by created_at asc
        limit ?`,
     )
     .all(Math.max(1, limit)) as SqlRow[];

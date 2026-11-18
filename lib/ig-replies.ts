@@ -7,6 +7,8 @@ export type IgCommentNode = {
   timestamp?: string;
   parent_id?: string;
   from?: IgFrom;
+  /** Some Graph payloads use `user` instead of `from`. */
+  user?: IgFrom;
   replies?: {
     data?: IgCommentNode[];
     paging?: { cursors?: { after?: string }; next?: string };
@@ -14,8 +16,9 @@ export type IgCommentNode = {
 };
 
 export function commentAuthor(comment: IgCommentNode): { id: string; username: string } {
-  const username = (comment.username || comment.from?.username || "").replace(/^@/, "");
-  const id = comment.from?.id || "";
+  const username = (comment.username || comment.from?.username || comment.user?.username || "")
+    .replace(/^@/, "");
+  const id = comment.from?.id || comment.user?.id || "";
   return { id, username };
 }
 

@@ -216,7 +216,7 @@ const MAX_COMMENT_PAGES_PER_MEDIA = 3;
 
 const COMMENT_FIELDS =
   "id,text,username,timestamp,parent_id,from{id,username},replies.limit(50){id,text,username,from{id,username}}";
-const REPLY_FIELDS = "id,text,username,timestamp,from{id,username}";
+const REPLY_FIELDS = "id,text,username,timestamp,from{id,username},user{id,username}";
 /** Extra pages on GET /{comment-id}/replies when marking shop answers. */
 const MAX_REPLY_PAGES = 3;
 
@@ -258,6 +258,8 @@ export type ScanCommentHit = RemoteComment & { answeredOutside: boolean };
 export async function collectCommentsFromMedia(options: {
   mediaLimit?: number;
   commentsPerMedia?: number;
+  /** Local open draft ids — re-check /replies when embedded nest is empty/truncated. */
+  verifyReplyIds?: ReadonlySet<string>;
   onMedia?: (info: { scanned: number; mediaId: string }) => void;
 } = {}): Promise<{ unreplied: RemoteComment[]; answered: RemoteComment[]; mediaScanned: number }> {
   await refreshInstagramTokenIfNeeded();
@@ -298,7 +300,21 @@ export async function collectCommentsFromMedia(options: {
       if (!isTopLevelComment(comment)) continue;
       const author = commentAuthor(comment);
       if (isOwnAuthor(author, names, ids)) continue;
-      const shopReply = findBusinessReply(comment, names, ids);
+      let shopReply = findBusinessReply(comment, names, ids);
+      // Instagram Login often omits nested replies in the media payload. For open
+      // local drafts, hit GET /{comment-id}/replies so UI answers are detected.
+      if (!shopReply && options.verifyReplyIds?.has(comment.id)) {
+        try {
+          const replies = await listCommentReplies(comment.id, {
+            token,
+            version,
+            authMode: secrets.authMode,
+          });
+          shopReply = findBusinessReplyAmong(replies, names, ids);
+        } catch {
+          // Keep as unreplied; inbox reconcile may retry later.
+        }
+      }
       const remote: RemoteComment = {
         id: comment.id,
         text: comment.text,
